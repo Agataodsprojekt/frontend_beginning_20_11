@@ -6,13 +6,13 @@ import {
   Pin,
   Sun,
   Moon,
-  Compass,
+  Ruler,
   Camera,
   MessageCircle,
   Share2,
   Lightbulb,
 } from "lucide-react";
-import { useTheme } from "../hooks/useTheme";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface ActionBarProps {
   onActionSelect?: (action: string) => void;
@@ -65,7 +65,7 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
     {
       id: "dimensions",
       label: "Dimensions",
-      icon: Compass,
+      icon: Ruler,
       tooltip: "Measure dimensions in the model",
     },
     {
