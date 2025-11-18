@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as OBC from "openbim-components";
 import * as THREE from "three";
+import ActionBar from "../components/ActionBar";
 
 const Viewer = () => {
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<OBC.Components | null>(null);
+  const [activeAction, setActiveAction] = useState<string>("move");
 
   useEffect(() => {
     if (!viewerContainerRef.current || viewerRef.current) return;
@@ -85,11 +87,24 @@ const Viewer = () => {
     };
   }, []);
 
+  const handleActionSelect = (action: string) => {
+    setActiveAction(action);
+    console.log("Selected action:", action);
+    // TODO: Implement action handlers for OpenBIM Components
+    // Examples:
+    // - undo/redo: integrate with history management
+    // - pin: use highlighter to mark elements
+    // - dimensions: use measurement tools
+    // - camera: capture screenshots
+  };
+
   return (
     <div 
       ref={viewerContainerRef} 
       style={{ width: '100%', height: '100vh', position: 'relative' }}
-    />
+    >
+      <ActionBar onActionSelect={handleActionSelect} />
+    </div>
   );
 };
 
