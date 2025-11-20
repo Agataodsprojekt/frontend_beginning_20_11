@@ -866,12 +866,16 @@ const Viewer = () => {
         console.log('Processing model with', model.items.length, 'fragments');
         
         for (const item of model.items) {
-          const fragment = item.fragment;
-          const mesh = fragment.mesh;
-          const fragmentId = fragment.id;
+          // item bezpośrednio ma mesh, id, ids (nie ma zagnieżdżonego fragment)
+          if (!item || !item.mesh) {
+            console.log('Skipping item without mesh');
+            continue;
+          }
           
-          // Pobierz wszystkie ID w tym fragmencie
+          const mesh = item.mesh;
+          const fragmentId = item.id;
           const allIDs = item.ids || [];
+          
           console.log(`Fragment ${fragmentId} has ${allIDs.length} elements`);
           
           // Sprawdź które ID powinny być ukryte
@@ -892,51 +896,62 @@ const Viewer = () => {
           if (idsToShow.size === 0) {
             mesh.visible = false;
             hiddenFragmentsRef.current.set(fragmentId, new Set(allIDs));
-            console.log(`Hidden entire mesh ${fragmentId}`);
+            console.log(`✅ Hidden entire mesh ${fragmentId}`);
           }
           // Jeśli wszystkie elementy mają być widoczne, pokaż mesh
           else if (idsToHide.size === 0) {
             mesh.visible = true;
-            console.log(`Showing entire mesh ${fragmentId}`);
+            console.log(`✅ Showing entire mesh ${fragmentId}`);
           }
-          // Jeśli część ma być ukryta, użyj setVisibility na fragmencie
+          // Jeśli część ma być ukryta - to jest trudniejsze z InstancedMesh
           else {
+            // W przypadku częściowego ukrywania, musimy użyć triku z przezroczystością
+            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - using instanceColor trick`);
             mesh.visible = true;
             hiddenFragmentsRef.current.set(fragmentId, idsToHide);
             
-            // Ukryj konkretne instancje poprzez ich widoczność
             try {
-              // Ustaw opacity dla ukrytych elementów (przezroczystość)
-              if (fragment.setVisibility) {
-                fragment.setVisibility(false, idsToHide);
-                console.log(`Used setVisibility for ${idsToHide.size} elements in fragment ${fragmentId}`);
-              } else {
-                // Fallback: użyj instanceColor z alpha = 0
-                console.log('Using instanceColor fallback for fragment', fragmentId);
-                const geometry = mesh.geometry;
-                const count = geometry.attributes.position.count;
-                
-                if (!mesh.instanceColor) {
-                  const colors = new Float32Array(count * 3);
-                  for (let i = 0; i < count; i++) {
-                    colors[i * 3] = 1;
-                    colors[i * 3 + 1] = 1;
-                    colors[i * 3 + 2] = 1;
-                  }
-                  mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+              // Utwórz lub zaktualizuj instanceColor
+              const count = allIDs.length;
+              
+              if (!mesh.instanceColor) {
+                console.log('Creating new instanceColor buffer');
+                const colors = new Float32Array(count * 3);
+                // Domyślnie wszystkie białe (widoczne)
+                for (let i = 0; i < count; i++) {
+                  colors[i * 3] = 1;
+                  colors[i * 3 + 1] = 1;
+                  colors[i * 3 + 2] = 1;
                 }
-                
-                // Ustaw kolor na czarny dla ukrytych (wizualnie niewidoczne na ciemnym tle)
-                idsToHide.forEach((id) => {
-                  const index = allIDs.indexOf(id);
-                  if (index !== -1) {
-                    mesh.instanceColor.setXYZ(index, 0, 0, 0);
-                  }
-                });
-                mesh.instanceColor.needsUpdate = true;
+                mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
               }
+              
+              // Ustaw kolor na czarny (niewidoczny) dla ukrytych elementów
+              // Zachowaj biały dla widocznych
+              allIDs.forEach((id: number, index: number) => {
+                if (idsToHide.has(id)) {
+                  // Ukryty - czarny
+                  mesh.instanceColor.setXYZ(index, 0, 0, 0);
+                } else {
+                  // Widoczny - biały
+                  mesh.instanceColor.setXYZ(index, 1, 1, 1);
+                }
+              });
+              
+              mesh.instanceColor.needsUpdate = true;
+              
+              // Upewnij się że materiał używa vertex colors
+              const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+              materials.forEach((mat: any) => {
+                if (mat) {
+                  mat.vertexColors = true;
+                  mat.needsUpdate = true;
+                }
+              });
+              
+              console.log(`✅ Applied instanceColor to ${idsToHide.size} hidden elements`);
             } catch (error) {
-              console.error('Error hiding instances in fragment:', error);
+              console.error('❌ Error applying instanceColor:', error);
             }
           }
         }
@@ -958,35 +973,30 @@ const Viewer = () => {
       // Przywróć widoczność wszystkich elementów
       for (const model of loadedModelsRef.current) {
         for (const item of model.items) {
-          const fragment = item.fragment;
-          const mesh = fragment.mesh;
-          const fragmentId = fragment.id;
+          if (!item || !item.mesh) continue;
+          
+          const mesh = item.mesh;
+          const fragmentId = item.id;
+          const allIDs = item.ids || [];
           
           // Pokaż mesh
           mesh.visible = true;
           
-          // Jeśli używaliśmy setVisibility, przywróć widoczność
+          // Przywróć kolory wszystkich elementów (biały = widoczny)
           const hiddenIDs = hiddenFragmentsRef.current.get(fragmentId);
-          if (hiddenIDs && hiddenIDs.size > 0) {
+          if (hiddenIDs && hiddenIDs.size > 0 && mesh.instanceColor) {
             try {
-              if (fragment.setVisibility) {
-                fragment.setVisibility(true, hiddenIDs);
-                console.log(`Restored visibility for ${hiddenIDs.size} elements in fragment ${fragmentId}`);
-              } else {
-                // Fallback: przywróć kolory
-                if (mesh.instanceColor) {
-                  const allIDs = item.ids || [];
-                  hiddenIDs.forEach((id) => {
-                    const index = allIDs.indexOf(id);
-                    if (index !== -1) {
-                      mesh.instanceColor.setXYZ(index, 1, 1, 1);
-                    }
-                  });
-                  mesh.instanceColor.needsUpdate = true;
-                }
-              }
+              console.log(`Restoring ${hiddenIDs.size} elements in fragment ${fragmentId}`);
+              
+              // Przywróć wszystkie elementy na biały (widoczne)
+              allIDs.forEach((_id: number, index: number) => {
+                mesh.instanceColor.setXYZ(index, 1, 1, 1);
+              });
+              
+              mesh.instanceColor.needsUpdate = true;
+              console.log(`✅ Restored visibility for fragment ${fragmentId}`);
             } catch (error) {
-              console.error('Error restoring visibility in fragment:', error);
+              console.error('❌ Error restoring visibility in fragment:', error);
             }
           }
         }
