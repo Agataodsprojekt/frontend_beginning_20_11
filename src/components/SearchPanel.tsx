@@ -128,8 +128,27 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
         {!isSearching && searchResults.length > 0 && (
           <>
-            <div className="mb-2 text-sm text-gray-600 dark:text-gray-400">
-              Znaleziono: <span className="font-semibold">{searchResults.length}</span> elementów
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Znaleziono: <span className="font-semibold">{searchResults.length}</span> elementów
+              </div>
+              {onAddToSelection && searchResults.length > 1 && (
+                <button
+                  onClick={() => {
+                    let addedCount = 0;
+                    searchResults.forEach(result => {
+                      onAddToSelection(result.expressID);
+                      addedCount++;
+                    });
+                    console.log(`✅ Added ${addedCount} elements to selection from search results`);
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 rounded-lg transition-colors shadow-sm hover:shadow"
+                  title="Dodaj wszystkie wyniki do selekcji"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Dodaj wszystkie
+                </button>
+              )}
             </div>
             <div className="space-y-2">
               {searchResults.map((result) => (

@@ -118,7 +118,8 @@
 - **Interakcja z wynikami**
   - Kliknięcie na wynik → automatyczne zaznaczenie elementu w modelu 3D
   - Wyświetlenie właściwości zaznaczonego elementu w panelu Properties
-  - **Przycisk "+" → dodanie elementu do selekcji wielokrotnej** ⭐
+  - **Przycisk "+" → dodanie pojedynczego elementu do selekcji wielokrotnej**
+  - **🆕 Przycisk "Dodaj wszystkie" → dodanie wszystkich wyników do selekcji jednym kliknięciem** ⭐
   - Możliwość dodania komentarza do znalezionego elementu
   - Przycisk X lub wybór innego narzędzia zamyka panel
 
@@ -128,6 +129,13 @@
   - Maksymalna wysokość: 80vh (przewijanie wyników)
   - Ciemny/jasny motyw zgodny z resztą aplikacji
   - Ikona lupy w nagłówku i polu wyszukiwania
+
+- **Szybka selekcja po typach** 🚀
+  - Wyszukaj np. "beam" → wyświetli wszystkie belki
+  - Kliknij "Dodaj wszystkie" → wszystkie belki dodane do selekcji
+  - Otwórz panel selekcji → kliknij "Izoluj"
+  - Widoczne tylko belki! 🎯
+  - Działa dla dowolnego typu: ściany, słupy, płyty, instalacje, itp.
 
 #### 🎯 Selekcja Wielokrotna i Izolacja Elementów (Selection & Isolation Tool)
 - **Nowe narzędzie selekcji i izolacji elementów** ⭐
