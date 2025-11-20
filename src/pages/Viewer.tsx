@@ -45,7 +45,8 @@ const Viewer = () => {
   const [selectedElements, setSelectedElements] = useState<SelectedElement[]>([]);
   const [isIsolated, setIsIsolated] = useState(false);
   const hiddenFragmentsRef = useRef<Map<string, Set<number>>>(new Map());
-  const originalMatricesRef = useRef<Map<string, Map<number, THREE.Matrix4>>>(new Map());
+  const originalFragmentsRef = useRef<Map<string, any>>(new Map()); // Przechowuje oryginalne fragmenty przed splittem
+  const splitFragmentsRef = useRef<Map<string, THREE.Mesh[]>>(new Map()); // Przechowuje nowe podzielone fragmenty
   const showSelectionPanelRef = useRef(showSelectionPanel);
   const isCtrlPressedRef = useRef(false);
   
@@ -810,6 +811,105 @@ const Viewer = () => {
     }
   };
 
+  // Funkcja do splittingu fragmentu na dwie części (wybrane i niewybrane)
+  const splitFragment = (
+    originalMesh: THREE.InstancedMesh,
+    allIDs: number[],
+    idsToShow: Set<number>,
+    idsToHide: Set<number>,
+    fragmentId: string
+  ): { visibleMesh: THREE.InstancedMesh | null; hiddenMesh: THREE.InstancedMesh | null } => {
+    try {
+      console.log(`🔨 Splitting fragment ${fragmentId}: ${idsToShow.size} visible, ${idsToHide.size} hidden`);
+      
+      const geometry = originalMesh.geometry;
+      const material = originalMesh.material;
+      
+      // Stwórz mesh dla widocznych elementów
+      let visibleMesh: THREE.InstancedMesh | null = null;
+      if (idsToShow.size > 0) {
+        visibleMesh = new THREE.InstancedMesh(geometry, material, idsToShow.size);
+        visibleMesh.frustumCulled = false;
+        
+        let visibleIndex = 0;
+        const matrix = new THREE.Matrix4();
+        
+        allIDs.forEach((id, originalIndex) => {
+          if (idsToShow.has(id)) {
+            originalMesh.getMatrixAt(originalIndex, matrix);
+            visibleMesh!.setMatrixAt(visibleIndex, matrix);
+            
+            // Kopiuj także kolor jeśli istnieje
+            if (originalMesh.instanceColor) {
+              const r = originalMesh.instanceColor.getX(originalIndex);
+              const g = originalMesh.instanceColor.getY(originalIndex);
+              const b = originalMesh.instanceColor.getZ(originalIndex);
+              
+              if (!visibleMesh!.instanceColor) {
+                const colors = new Float32Array(idsToShow.size * 3);
+                visibleMesh!.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+              }
+              visibleMesh!.instanceColor.setXYZ(visibleIndex, r, g, b);
+            }
+            
+            visibleIndex++;
+          }
+        });
+        
+        visibleMesh.instanceMatrix.needsUpdate = true;
+        if (visibleMesh.instanceColor) {
+          visibleMesh.instanceColor.needsUpdate = true;
+        }
+        
+        console.log(`✅ Created visible mesh with ${idsToShow.size} instances`);
+      }
+      
+      // Stwórz mesh dla ukrytych elementów (będzie ukryty)
+      let hiddenMesh: THREE.InstancedMesh | null = null;
+      if (idsToHide.size > 0) {
+        hiddenMesh = new THREE.InstancedMesh(geometry, material, idsToHide.size);
+        hiddenMesh.visible = false; // Od razu ukryty
+        hiddenMesh.frustumCulled = false;
+        
+        let hiddenIndex = 0;
+        const matrix = new THREE.Matrix4();
+        
+        allIDs.forEach((id, originalIndex) => {
+          if (idsToHide.has(id)) {
+            originalMesh.getMatrixAt(originalIndex, matrix);
+            hiddenMesh!.setMatrixAt(hiddenIndex, matrix);
+            
+            if (originalMesh.instanceColor) {
+              const r = originalMesh.instanceColor.getX(originalIndex);
+              const g = originalMesh.instanceColor.getY(originalIndex);
+              const b = originalMesh.instanceColor.getZ(originalIndex);
+              
+              if (!hiddenMesh!.instanceColor) {
+                const colors = new Float32Array(idsToHide.size * 3);
+                hiddenMesh!.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+              }
+              hiddenMesh!.instanceColor.setXYZ(hiddenIndex, r, g, b);
+            }
+            
+            hiddenIndex++;
+          }
+        });
+        
+        hiddenMesh.instanceMatrix.needsUpdate = true;
+        if (hiddenMesh.instanceColor) {
+          hiddenMesh.instanceColor.needsUpdate = true;
+        }
+        
+        console.log(`✅ Created hidden mesh with ${idsToHide.size} instances (will be invisible)`);
+      }
+      
+      return { visibleMesh, hiddenMesh };
+    } catch (error) {
+      console.error(`❌ Error splitting fragment ${fragmentId}:`, error);
+      return { visibleMesh: null, hiddenMesh: null };
+    }
+  };
+
   // Funkcje zarządzania selekcją
   const addToSelection = async (expressID: number) => {
     // Sprawdź czy element już jest w selekcji
@@ -904,20 +1004,59 @@ const Viewer = () => {
             mesh.visible = true;
             console.log(`✅ Showing entire mesh ${fragmentId}`);
           }
-          // Jeśli część ma być ukryta - SPLIT: ukryj cały mesh i stwórz nowy tylko z wybranymi
+          // Jeśli część ma być ukryta - SPLIT fragment na dwie części
           else {
-            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - WORKAROUND: hiding entire mesh`);
+            console.log(`🔨 Partial hiding in fragment ${fragmentId} - splitting into visible/hidden meshes`);
             
-            // TYMCZASOWE OBEJŚCIE: ukryj cały fragment
-            // To nie jest idealne, ale przynajmniej działa
-            // TODO: Zaimplementować prawdziwe częściowe ukrywanie gdy znajdziemy lepszą metodę
+            // Zapisz oryginalny fragment jeśli jeszcze nie zapisano
+            if (!originalFragmentsRef.current.has(fragmentId)) {
+              originalFragmentsRef.current.set(fragmentId, {
+                mesh: mesh,
+                parent: mesh.parent,
+                visible: mesh.visible
+              });
+              console.log(`💾 Saved original fragment ${fragmentId}`);
+            }
             
-            mesh.visible = false;
-            hiddenFragmentsRef.current.set(fragmentId, new Set(allIDs));
+            // Podziel fragment na widoczny i ukryty
+            const { visibleMesh, hiddenMesh } = splitFragment(
+              mesh,
+              allIDs,
+              idsToShow,
+              idsToHide,
+              fragmentId
+            );
             
-            console.log(`⚠️ UWAGA: Ukryto cały fragment ${fragmentId} (${allIDs.length} elementów)`);
-            console.log(`   Wybrane elementy które też zostały ukryte: ${idsToShow.size}`);
-            console.log(`   To jest tymczasowe obejście - trzeba znaleźć lepszą metodę!`);
+            if (visibleMesh || hiddenMesh) {
+              // Ukryj oryginalny mesh
+              mesh.visible = false;
+              
+              // Dodaj nowe meshe do sceny (w tym samym miejscu co oryginalny)
+              const parent = mesh.parent;
+              const newMeshes: THREE.Mesh[] = [];
+              
+              if (visibleMesh && parent) {
+                parent.add(visibleMesh);
+                newMeshes.push(visibleMesh);
+                console.log(`✅ Added visible mesh to scene`);
+              }
+              
+              if (hiddenMesh && parent) {
+                parent.add(hiddenMesh);
+                newMeshes.push(hiddenMesh);
+                console.log(`✅ Added hidden mesh to scene (invisible)`);
+              }
+              
+              // Zapisz nowe meshe do późniejszego usunięcia
+              splitFragmentsRef.current.set(fragmentId, newMeshes);
+              hiddenFragmentsRef.current.set(fragmentId, idsToHide);
+              
+              console.log(`✅ Fragment ${fragmentId} successfully split!`);
+            } else {
+              console.error(`❌ Failed to split fragment ${fragmentId}`);
+              // Fallback - ukryj cały mesh
+              mesh.visible = false;
+            }
           }
         }
       }
@@ -935,44 +1074,47 @@ const Viewer = () => {
     try {
       console.log('👁️ Starting unisolation - restoring all elements');
       
-      // Przywróć widoczność wszystkich elementów
+      // Najpierw usuń wszystkie podzielone meshe i przywróć oryginalne
+      splitFragmentsRef.current.forEach((splitMeshes, fragmentId) => {
+        console.log(`🧹 Cleaning up split meshes for fragment ${fragmentId}`);
+        
+        // Usuń podzielone meshe ze sceny
+        splitMeshes.forEach(mesh => {
+          if (mesh.parent) {
+            mesh.parent.remove(mesh);
+          }
+          // Nie dispose geometry i material bo są współdzielone z oryginalnym
+          console.log(`🗑️ Removed split mesh from scene`);
+        });
+        
+        // Przywróć oryginalny fragment
+        const originalFragment = originalFragmentsRef.current.get(fragmentId);
+        if (originalFragment) {
+          originalFragment.mesh.visible = originalFragment.visible;
+          console.log(`✅ Restored original fragment ${fragmentId}`);
+        }
+      });
+      
+      // Przywróć widoczność wszystkich pozostałych elementów
       for (const model of loadedModelsRef.current) {
         for (const item of model.items) {
           if (!item || !item.mesh) continue;
           
           const mesh = item.mesh;
           const fragmentId = item.id;
-          const allIDs = item.ids || [];
           
-          // Pokaż mesh
+          // Pokaż mesh (może był ukryty jako pełny fragment)
           mesh.visible = true;
           
-          // Przywróć oryginalne pozycje elementów
-          const originalMatrices = originalMatricesRef.current.get(fragmentId);
-          if (originalMatrices && originalMatrices.size > 0) {
-            try {
-              console.log(`Restoring ${originalMatrices.size} elements in fragment ${fragmentId}`);
-              
-              // Przywróć oryginalne pozycje ze zapisanych matryc
-              allIDs.forEach((id: number, index: number) => {
-                const originalMatrix = originalMatrices.get(id);
-                if (originalMatrix) {
-                  mesh.setMatrixAt(index, originalMatrix);
-                }
-              });
-              
-              mesh.instanceMatrix.needsUpdate = true;
-              console.log(`✅ Restored original positions for fragment ${fragmentId}`);
-            } catch (error) {
-              console.error('❌ Error restoring positions in fragment:', error);
-            }
-          }
+          console.log(`✅ Showed fragment ${fragmentId}`);
         }
       }
       
-      // Wyczyść zapisane ukryte fragmenty i matryce
+      // Wyczyść wszystkie referencje
       hiddenFragmentsRef.current.clear();
-      originalMatricesRef.current.clear();
+      originalFragmentsRef.current.clear();
+      splitFragmentsRef.current.clear();
+      
       setIsIsolated(false);
       console.log('✅ Unisolation complete - all elements visible');
     } catch (error) {

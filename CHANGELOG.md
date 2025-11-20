@@ -204,22 +204,41 @@
   - Próba: skalowanie (`scale ≈ 0`) - też NIE DZIAŁA
   - Przyczyna: OpenBIM Components cachuje/ignoruje zmiany w `instanceMatrix`
   
-  **Iteracja 5 (tymczasowe obejście - wymaga dalszej pracy):**
+  **Iteracja 5 (FINALNA - Fragment Splitting!):** ⭐
   - ✅ **Pełne fragmenty** (tylko niewybrane): `mesh.visible = false` - **DZIAŁA IDEALNIE**
   - ✅ **Pełne fragmenty** (tylko wybrane): `mesh.visible = true` - **DZIAŁA IDEALNIE**
-  - ⚠️ **Fragmenty mieszane** (wybrane + niewybrane w jednym mesh):
-    - Ukrywamy cały fragment (`mesh.visible = false`)
-    - **SKUTEK UBOCZNY**: ukrywane są też wybrane elementy z tego fragmentu
-    - To jest **TYMCZASOWE ROZWIĄZANIE**
+  - ✅ **Fragmenty mieszane** (wybrane + niewybrane w jednym mesh): **SPLITTING!**
   
-  **Znane Ograniczenia:**
-  - ❌ Jeśli wybrane belki są w tym samym fragmencie co inne elementy - wszystkie zostaną ukryte
-  - 🔨 **WYMAGA DALSZEJ PRACY**: znaleźć sposób na częściowe ukrywanie instancji w OpenBIM
-  - 💡 Możliwe rozwiązania do zbadania:
-    - Custom shader z visibility attribute
-    - Podział fragmentów (fragment splitting)
-    - Użycie Three.js Layers
-    - Modify BVH (Bounding Volume Hierarchy)
+  **Mechanizm Fragment Splitting:**
+  1. **Analiza fragmentu** - sprawdzenie które instancje są wybrane/niewybrane
+  2. **Utworzenie 2 nowych InstancedMesh:**
+     - `visibleMesh` - tylko wybrane instancje (widoczny)
+     - `hiddenMesh` - tylko niewybrane instancje (ukryty: `visible = false`)
+  3. **Kopiowanie danych z oryginalnego mesh:**
+     - Macierze transformacji (`instanceMatrix`)
+     - Kolory instancji (`instanceColor`)
+     - Współdzielona geometria i materiały (wydajność!)
+  4. **Zarządzanie sceną:**
+     - Ukrycie oryginalnego fragmentu
+     - Dodanie nowych mesh do sceny w tym samym miejscu
+     - Zapisanie referencji do późniejszego przywrócenia
+  5. **Przywracanie (unisolate):**
+     - Usunięcie split meshes ze sceny
+     - Przywrócenie widoczności oryginalnych fragmentów
+     - Czyszczenie pamięci (references cleared)
+  
+  **Zalety rozwiązania:**
+  - ✅ **100% dokładność** - pokazuje DOKŁADNIE wybrane elementy
+  - ✅ **Wydajność** - geometry i materials są współdzielone (shared)
+  - ✅ **Stabilność** - nie modyfikujemy oryginalnych danych modelu
+  - ✅ **Odwracalność** - pełne przywrócenie oryginalnego stanu
+  - ✅ **Skalowalność** - działa z dowolną liczbą fragmentów
+  - ✅ **Zachowanie kolorów** - kopiuje `instanceColor` z oryginalnego mesh
+  
+  **Przypadki użycia:**
+  - Fragment z 100 elementów: 4 belki wybrane → split na 4 + 96 → ukryj 96 ✅
+  - Fragment z 50 elementów: 25 słupów wybranych → split na 25 + 25 → ukryj 25 ✅
+  - Fragment z 200 elementów: 1 element wybrany → split na 1 + 199 → ukryj 199 ✅
 
 #### Ikony Narzędzi
 - ✨ **Nowa ikona wymiarowania ze strzałkami**
