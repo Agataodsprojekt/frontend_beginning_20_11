@@ -128,10 +128,22 @@ const DimensionOptionsPanel = ({
         </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-          💡 Wskazówka: Używaj tych opcji do precyzyjnego wymiarowania modelu
-        </p>
+      <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+        <div className="flex items-start gap-2">
+          <span className="text-lg">⌨️</span>
+          <div>
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              Sterowanie:
+            </p>
+            <ul className="text-xs text-gray-600 dark:text-gray-400 mt-1 space-y-1">
+              <li>• <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Shift</kbd> + klik = dodaj punkt wymiaru</li>
+              <li>• <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Shift</kbd> + podwójny klik = zaznacz wymiar</li>
+              <li>• <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Delete</kbd> = usuń zaznaczony</li>
+              <li>• <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">ESC</kbd> = anuluj</li>
+              <li className="text-green-600 dark:text-green-400 font-medium">• Bez Shift = nawigacja kamerą działa normalnie! 🎥</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );

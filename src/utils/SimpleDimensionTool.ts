@@ -83,6 +83,12 @@ export class SimpleDimensionTool {
     }
   }
 
+  // Czyści podgląd i snap marker (używane gdy Shift nie jest wciśnięty)
+  public clearPreviewAndSnap(): void {
+    this.clearPreview();
+    this.clearSnapMarker();
+  }
+
   private getPoint(event: MouseEvent, objects: THREE.Object3D[]): THREE.Vector3 | null {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     const mouse = new THREE.Vector2(

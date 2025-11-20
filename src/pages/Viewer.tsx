@@ -183,30 +183,44 @@ const Viewer = () => {
     dimensionsRef.current = dimensions;
     
     // Event listener dla ruchu myszy w trybie wymiarowania (podgląd)
+    // Tylko pokazuj podgląd gdy Shift jest wciśnięty
     const handleDimensionMove = (event: MouseEvent) => {
-      if (dimensions.enabled && modelObjectsRef.current.length > 0) {
+      if (!dimensions.enabled || modelObjectsRef.current.length === 0) return;
+      
+      // Tylko pokazuj podgląd gdy Shift jest wciśnięty
+      if (event.shiftKey) {
         dimensions.handleMouseMove(event, modelObjectsRef.current);
+      } else {
+        // Bez Shift - wyczyść podgląd aby nie przeszkadzał
+        dimensions.clearPreviewAndSnap();
       }
     };
     
     // Stan dla zaznaczonego wymiaru do usunięcia
     let selectedMeasurementToDelete: THREE.Group | null = null;
     
-    // Zmienne dla wykrywania podwójnego kliknięcia
+    // Zmienne dla wykrywania podwójnego kliknięcia i Shift
     let lastClickTime = 0;
     const doubleClickThreshold = 300; // ms
     
-    // Obsługa kliknięć: pojedyncze = dodaj punkt, podwójne = zaznacz do usunięcia
+    // Obsługa kliknięć: Shift + klik = dodaj punkt, Shift + podwójny klik = zaznacz do usunięcia
     const handleDimensionClickWithDelete = (event: MouseEvent) => {
       if (!dimensions.enabled) return;
+      
+      // WAŻNE: Tylko reaguj gdy Shift jest wciśnięty!
+      // Bez Shift = pozwól kontrolkom kamery działać normalnie
+      if (!event.shiftKey) {
+        return; // Kamera może swobodnie działać
+      }
       
       const currentTime = Date.now();
       const timeSinceLastClick = currentTime - lastClickTime;
       
-      // Podwójne kliknięcie = zaznacz wymiar do usunięcia
+      // Shift + Podwójne kliknięcie = zaznacz wymiar do usunięcia
       if (timeSinceLastClick < doubleClickThreshold) {
-        console.log('🎯 Double-click detected - trying to select measurement for deletion');
+        console.log('🎯 Shift+Double-click detected - trying to select measurement for deletion');
         event.stopPropagation();
+        event.preventDefault();
         
         // Wyczyść poprzednie zaznaczenie
         if (selectedMeasurementToDelete) {
@@ -225,13 +239,13 @@ const Viewer = () => {
         return; // Nie dodawaj punktu!
       }
       
-      // Pojedyncze kliknięcie = dodaj punkt wymiaru
+      // Shift + Pojedyncze kliknięcie = dodaj punkt wymiaru
       lastClickTime = currentTime;
       
       // Małe opóźnienie aby sprawdzić czy to nie będzie podwójne kliknięcie
       setTimeout(() => {
         if (Date.now() - lastClickTime >= doubleClickThreshold && modelObjectsRef.current.length > 0) {
-          console.log('➕ Single click - adding dimension point');
+          console.log('➕ Shift+click - adding dimension point');
           dimensions.handleClick(event, modelObjectsRef.current);
         }
       }, doubleClickThreshold);
@@ -977,6 +991,47 @@ const Viewer = () => {
         onSnapChange={setDimensionSnap}
         onAlignToEdgeChange={setAlignToEdgeMode}
       />
+
+      {/* Wskazówka Shift - pokazuje się gdy wymiarowanie jest aktywne */}
+      {isDimensionMode && (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(37, 99, 235, 0.95)',
+          color: 'white',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '600',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'pulse 2s ease-in-out infinite',
+        }}>
+          <span style={{ fontSize: '20px' }}>⌨️</span>
+          Trzymaj <kbd style={{
+            backgroundColor: 'white',
+            color: '#2563eb',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontWeight: 'bold',
+            margin: '0 4px',
+          }}>SHIFT</kbd> i kliknij aby dodać punkt wymiaru
+        </div>
+      )}
+      
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+          }
+        `}
+      </style>
 
     </div>
   );
