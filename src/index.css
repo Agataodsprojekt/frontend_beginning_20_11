@@ -117,6 +117,22 @@
     @apply bg-background text-foreground;
   }
 
+  /* Fix input text color - ensure it's dark and visible */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  textarea {
+    color: #1f2937 !important; /* gray-800 - dark gray for good contrast */
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #6b7280 !important; /* gray-500 - medium gray for placeholders */
+  }
+
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
     overflow-wrap: anywhere;
     word-break: break-word;
