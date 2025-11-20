@@ -835,6 +835,73 @@ export class SimpleDimensionTool {
     this.isSelectingEdge = false;
   }
 
+  // Anulowanie bieżącego wymiaru (ESC)
+  public cancelCurrentMeasurement(): void {
+    if (this.points.length > 0) {
+      console.log('📏 Canceling current measurement');
+      
+      // Usuń ostatni marker jeśli istnieje
+      if (this.markers.length > 0) {
+        const lastMarker = this.markers.pop();
+        if (lastMarker) {
+          this.scene.remove(lastMarker);
+        }
+      }
+      
+      // Wyczyść punkty i podgląd
+      this.points = [];
+      this.clearPreview();
+      this.clearSnapMarker();
+    }
+  }
+
+  // Usuwanie wybranego wymiaru (prawy przycisk + Delete)
+  public handleRightClick(event: MouseEvent, objects: THREE.Object3D[]): THREE.Group | null {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    this.raycaster.setFromCamera(mouse, this.camera);
+    
+    // Sprawdź czy kliknięto w jakiś wymiar
+    let nearestMeasurement: THREE.Group | null = null;
+    let minDistance = 0.5; // Próg odległości
+
+    this.measurements.forEach((group) => {
+      // Sprawdź odległość od każdego dziecka w grupie
+      group.children.forEach((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+          const intersects = this.raycaster.intersectObject(child, false);
+          if (intersects.length > 0 && intersects[0].distance < minDistance) {
+            minDistance = intersects[0].distance;
+            nearestMeasurement = group;
+          }
+        }
+        // Sprawdź także sprite'y (etykiety)
+        if (child instanceof THREE.Sprite) {
+          const distance = this.raycaster.ray.distanceToPoint(child.position);
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestMeasurement = group;
+          }
+        }
+      });
+    });
+
+    return nearestMeasurement;
+  }
+
+  public deleteMeasurement(measurement: THREE.Group): void {
+    const index = this.measurements.indexOf(measurement);
+    if (index > -1) {
+      this.scene.remove(measurement);
+      this.measurements.splice(index, 1);
+      console.log('📏 Measurement deleted');
+    }
+  }
+
   // Metoda do resetowania krawędzi odniesienia (wywoływana gdy zmienia się tryb)
   public resetReferenceEdge(): void {
     this.clearReferenceEdge();

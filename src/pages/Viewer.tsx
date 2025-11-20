@@ -196,8 +196,39 @@ const Viewer = () => {
       }
     };
     
+    // Stan dla zaznaczonego wymiaru do usunięcia
+    let selectedMeasurementToDelete: THREE.Group | null = null;
+    
+    // Event listener dla prawego przycisku myszy (zaznaczanie wymiaru do usunięcia)
+    const handleRightClick = (event: MouseEvent) => {
+      if (dimensions.enabled && modelObjectsRef.current.length > 0) {
+        event.preventDefault();
+        selectedMeasurementToDelete = dimensions.handleRightClick(event, modelObjectsRef.current);
+        if (selectedMeasurementToDelete) {
+          console.log('📏 Measurement selected for deletion. Press Delete to remove.');
+        }
+      }
+    };
+    
+    // Event listener dla klawisza ESC (anulowanie bieżącego wymiaru)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (dimensions.enabled) {
+        if (event.key === 'Escape') {
+          dimensions.cancelCurrentMeasurement();
+          selectedMeasurementToDelete = null;
+          console.log('📏 Current measurement canceled');
+        } else if (event.key === 'Delete' && selectedMeasurementToDelete) {
+          dimensions.deleteMeasurement(selectedMeasurementToDelete);
+          selectedMeasurementToDelete = null;
+          console.log('📏 Measurement deleted');
+        }
+      }
+    };
+    
     viewerContainerRef.current.addEventListener('click', handleDimensionClick);
     viewerContainerRef.current.addEventListener('mousemove', handleDimensionMove);
+    viewerContainerRef.current.addEventListener('contextmenu', handleRightClick);
+    document.addEventListener('keydown', handleKeyDown);
     console.log("📏 Simple dimension tool initialized");
 
     // Pętla aktualizacji dla wymiarów (skalowanie etykiet względem kamery)
@@ -349,7 +380,9 @@ const Viewer = () => {
       if (viewerContainerRef.current) {
         viewerContainerRef.current.removeEventListener('click', handleDimensionClick);
         viewerContainerRef.current.removeEventListener('mousemove', handleDimensionMove);
+        viewerContainerRef.current.removeEventListener('contextmenu', handleRightClick);
       }
+      document.removeEventListener('keydown', handleKeyDown);
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
