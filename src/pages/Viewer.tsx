@@ -140,6 +140,22 @@ const Viewer = () => {
     const dimensions = new OBC.LengthMeasurement(viewer);
     dimensions.enabled = false; // Domyślnie wyłączone
     dimensions.snapDistance = 0.25; // Dystans przyciągania do punktów
+    
+    // Event listener dla nowych wymiarów
+    dimensions.onBeforeCreate.add(() => {
+      console.log("📏 Starting new measurement...");
+    });
+    
+    dimensions.onAfterCreate.add((measurement: any) => {
+      console.log("📏 Measurement created:", measurement);
+      const length = measurement.distance;
+      console.log(`📏 Distance: ${length?.toFixed(3)} meters`);
+    });
+    
+    dimensions.onBeforeDelete.add((id: string) => {
+      console.log("📏 Deleting measurement:", id);
+    });
+    
     dimensionsRef.current = dimensions;
     console.log("📏 Dimension tool initialized");
 

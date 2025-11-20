@@ -69,12 +69,6 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
       tooltip: "Adjust lighting and environment",
     },
     {
-      id: "dimensions",
-      label: "Dimensions",
-      icon: Ruler,
-      tooltip: "Measure dimensions in the model",
-    },
-    {
       id: "camera",
       label: "Screenshot",
       icon: Camera,
