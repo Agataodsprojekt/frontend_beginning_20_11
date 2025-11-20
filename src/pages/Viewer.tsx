@@ -904,51 +904,20 @@ const Viewer = () => {
             mesh.visible = true;
             console.log(`✅ Showing entire mesh ${fragmentId}`);
           }
-          // Jeśli część ma być ukryta - zkolapsuj ukryte instancje do niewidzialnego punktu
+          // Jeśli część ma być ukryta - SPLIT: ukryj cały mesh i stwórz nowy tylko z wybranymi
           else {
-            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - using scale trick (scale≈0)`);
-            mesh.visible = true;
-            hiddenFragmentsRef.current.set(fragmentId, idsToHide);
+            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - WORKAROUND: hiding entire mesh`);
             
-            try {
-              // Zapisz oryginalne matryce jeśli jeszcze nie zapisano
-              if (!originalMatricesRef.current.has(fragmentId)) {
-                const originalMatrices = new Map<number, THREE.Matrix4>();
-                allIDs.forEach((id: number, index: number) => {
-                  const matrix = new THREE.Matrix4();
-                  mesh.getMatrixAt(index, matrix);
-                  originalMatrices.set(id, matrix.clone());
-                });
-                originalMatricesRef.current.set(fragmentId, originalMatrices);
-                console.log(`💾 Saved ${originalMatrices.size} original matrices for fragment ${fragmentId}`);
-              }
-              
-              // Ukryj elementy poprzez skalę = 0 (zkolapsowanie do punktu)
-              const matrix = new THREE.Matrix4();
-              const zeroScale = new THREE.Vector3(0.00001, 0.00001, 0.00001); // Prawie zero (zero powoduje problemy)
-              
-              allIDs.forEach((id: number, index: number) => {
-                mesh.getMatrixAt(index, matrix);
-                
-                if (idsToHide.has(id)) {
-                  // Dekompozycja macierzy
-                  const position = new THREE.Vector3();
-                  const quaternion = new THREE.Quaternion();
-                  const scale = new THREE.Vector3();
-                  matrix.decompose(position, quaternion, scale);
-                  
-                  // Ustaw skalę prawie na zero (element staje się niewidzialny)
-                  matrix.compose(position, quaternion, zeroScale);
-                  mesh.setMatrixAt(index, matrix);
-                }
-                // Widoczne elementy - zostaw ich oryginalne macierze
-              });
-              
-              mesh.instanceMatrix.needsUpdate = true;
-              console.log(`✅ Scaled down ${idsToHide.size} elements to invisible (scale≈0) in fragment ${fragmentId}`);
-            } catch (error) {
-              console.error('❌ Error displacing instances:', error);
-            }
+            // TYMCZASOWE OBEJŚCIE: ukryj cały fragment
+            // To nie jest idealne, ale przynajmniej działa
+            // TODO: Zaimplementować prawdziwe częściowe ukrywanie gdy znajdziemy lepszą metodę
+            
+            mesh.visible = false;
+            hiddenFragmentsRef.current.set(fragmentId, new Set(allIDs));
+            
+            console.log(`⚠️ UWAGA: Ukryto cały fragment ${fragmentId} (${allIDs.length} elementów)`);
+            console.log(`   Wybrane elementy które też zostały ukryte: ${idsToShow.size}`);
+            console.log(`   To jest tymczasowe obejście - trzeba znaleźć lepszą metodę!`);
           }
         }
       }
