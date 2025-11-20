@@ -29,7 +29,7 @@ export class SimpleDimensionTool {
   public orthogonalMode: boolean = false;
   public snapToPoints: boolean = false;
   public alignToEdgeMode: 'none' | 'parallel' | 'perpendicular' = 'none';
-  private snapThreshold: number = 0.15; // Próg przyciągania w jednostkach modelu
+  private snapThreshold: number = 0.5; // Próg przyciągania w jednostkach modelu (zwiększony dla lepszego działania)
   
   // Krawędź odniesienia
   private referenceEdge: EdgeReference | null = null;
@@ -120,18 +120,23 @@ export class SimpleDimensionTool {
 
   private findNearestSnapPoint(clickPoint: THREE.Vector3, object: THREE.Object3D): SnapPoint | null {
     const snapPoints: SnapPoint[] = [];
+    
+    console.log('🧲 Finding snap points for object:', object.type);
 
-    // Zbierz wszystkie punkty charakterystyczne z geometrii
-    object.traverseAncestors((ancestor) => {
-      if (ancestor instanceof THREE.Mesh && ancestor.geometry) {
-        const geometry = ancestor.geometry;
-        const worldMatrix = ancestor.matrixWorld;
+    // Funkcja do przetwarzania pojedynczego obiektu
+    const processObject = (obj: THREE.Object3D) => {
+      if (obj instanceof THREE.Mesh && obj.geometry) {
+        const geometry = obj.geometry;
+        const worldMatrix = obj.matrixWorld;
 
         // Pobierz wierzchołki
         const position = geometry.attributes.position;
         if (position) {
+          // Ograniczamy liczbę wierzchołków do analizy (wydajność)
+          const step = Math.max(1, Math.floor(position.count / 100));
           const vertices: THREE.Vector3[] = [];
-          for (let i = 0; i < position.count; i++) {
+          
+          for (let i = 0; i < position.count; i += step) {
             const vertex = new THREE.Vector3();
             vertex.fromBufferAttribute(position, i);
             vertex.applyMatrix4(worldMatrix);
@@ -143,25 +148,37 @@ export class SimpleDimensionTool {
             snapPoints.push({ position: v, type: 'vertex' });
           });
 
-          // Dodaj środki krawędzi
-          for (let i = 0; i < vertices.length - 1; i++) {
-            const midpoint = new THREE.Vector3()
-              .addVectors(vertices[i], vertices[i + 1])
-              .multiplyScalar(0.5);
-            snapPoints.push({ position: midpoint, type: 'edge' });
-          }
-
-          // Dodaj środek geometrii
+          // Dodaj środek geometrii (ważny punkt!)
           geometry.computeBoundingBox();
           if (geometry.boundingBox) {
             const center = new THREE.Vector3();
             geometry.boundingBox.getCenter(center);
             center.applyMatrix4(worldMatrix);
             snapPoints.push({ position: center, type: 'center' });
+            
+            // Dodaj rogi bounding box (początek i koniec elementu)
+            const min = geometry.boundingBox.min.clone().applyMatrix4(worldMatrix);
+            const max = geometry.boundingBox.max.clone().applyMatrix4(worldMatrix);
+            snapPoints.push({ position: min, type: 'vertex' });
+            snapPoints.push({ position: max, type: 'vertex' });
+            
+            // Dodaj środki krawędzi bounding box
+            const midX = new THREE.Vector3((min.x + max.x) / 2, min.y, min.z);
+            const midY = new THREE.Vector3(min.x, (min.y + max.y) / 2, min.z);
+            const midZ = new THREE.Vector3(min.x, min.y, (min.z + max.z) / 2);
+            snapPoints.push({ position: midX, type: 'midpoint' });
+            snapPoints.push({ position: midY, type: 'midpoint' });
+            snapPoints.push({ position: midZ, type: 'midpoint' });
           }
         }
       }
-    });
+    };
+
+    // Przetwórz kliknięty obiekt i jego dzieci
+    processObject(object);
+    object.traverse(processObject);
+    
+    console.log('🧲 Found', snapPoints.length, 'snap points');
 
     // Znajdź najbliższy punkt w promieniu snapThreshold
     let nearestPoint: SnapPoint | null = null;
@@ -174,6 +191,10 @@ export class SimpleDimensionTool {
         nearestPoint = sp;
       }
     });
+    
+    if (nearestPoint) {
+      console.log('🧲 Snap found! Type:', nearestPoint.type, 'Distance:', minDistance.toFixed(3));
+    }
 
     return nearestPoint;
   }
@@ -481,11 +502,11 @@ export class SimpleDimensionTool {
   private showSnapMarker(position: THREE.Vector3): void {
     this.clearSnapMarker();
 
-    const geometry = new THREE.SphereGeometry(0.04, 16, 16);
+    const geometry = new THREE.SphereGeometry(0.08, 16, 16); // Zwiększony rozmiar
     const material = new THREE.MeshBasicMaterial({
-      color: 0xFFD700, // Złoty kolor dla snap
+      color: 0x00FF00, // Jasnozielony kolor dla lepszej widoczności
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
       depthTest: false,
       depthWrite: false
     });
@@ -495,7 +516,7 @@ export class SimpleDimensionTool {
     this.scene.add(this.snapMarker);
 
     // Dodaj pulsujący efekt
-    const scale = 1 + Math.sin(Date.now() * 0.01) * 0.2;
+    const scale = 1 + Math.sin(Date.now() * 0.01) * 0.3;
     this.snapMarker.scale.setScalar(scale);
   }
 

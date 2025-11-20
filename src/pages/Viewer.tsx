@@ -192,14 +192,21 @@ const Viewer = () => {
     // Stan dla zaznaczonego wymiaru do usunięcia
     let selectedMeasurementToDelete: THREE.Group | null = null;
     
-    // Modyfikacja handleDimensionClick aby obsługiwać Ctrl+kliknięcie dla usuwania
+    // Zmienne dla wykrywania podwójnego kliknięcia
+    let lastClickTime = 0;
+    const doubleClickThreshold = 300; // ms
+    
+    // Obsługa kliknięć: pojedyncze = dodaj punkt, podwójne = zaznacz do usunięcia
     const handleDimensionClickWithDelete = (event: MouseEvent) => {
       if (!dimensions.enabled) return;
       
-      // Ctrl + kliknięcie = zaznacz wymiar do usunięcia (TYLKO to, nie dodawaj punktu!)
-      if (event.ctrlKey || event.metaKey) {
-        console.log('🎯 Ctrl+click detected - trying to select measurement for deletion');
-        event.stopPropagation(); // Zatrzymaj propagację eventu
+      const currentTime = Date.now();
+      const timeSinceLastClick = currentTime - lastClickTime;
+      
+      // Podwójne kliknięcie = zaznacz wymiar do usunięcia
+      if (timeSinceLastClick < doubleClickThreshold) {
+        console.log('🎯 Double-click detected - trying to select measurement for deletion');
+        event.stopPropagation();
         
         // Wyczyść poprzednie zaznaczenie
         if (selectedMeasurementToDelete) {
@@ -213,14 +220,21 @@ const Viewer = () => {
         } else {
           console.log('❌ No measurement found at click position');
         }
-        return; // WAŻNE: Nie kontynuuj - nie dodawaj punktu!
+        
+        lastClickTime = 0; // Reset czasu
+        return; // Nie dodawaj punktu!
       }
       
-      // Normalne kliknięcie = dodaj punkt wymiaru (tylko jeśli NIE było Ctrl)
-      if (modelObjectsRef.current.length > 0) {
-        console.log('➕ Normal click - adding dimension point');
-        dimensions.handleClick(event, modelObjectsRef.current);
-      }
+      // Pojedyncze kliknięcie = dodaj punkt wymiaru
+      lastClickTime = currentTime;
+      
+      // Małe opóźnienie aby sprawdzić czy to nie będzie podwójne kliknięcie
+      setTimeout(() => {
+        if (Date.now() - lastClickTime >= doubleClickThreshold && modelObjectsRef.current.length > 0) {
+          console.log('➕ Single click - adding dimension point');
+          dimensions.handleClick(event, modelObjectsRef.current);
+        }
+      }, doubleClickThreshold);
     };
     
     // Event listener dla klawisza ESC (anulowanie bieżącego wymiaru) i Delete (usuwanie)
