@@ -78,9 +78,12 @@ const DimensionOptionsPanel = ({
           <div className="flex items-center gap-2">
             <Move className="w-4 h-4 text-gray-500" />
             <span className="font-medium text-gray-800 dark:text-gray-100 text-sm">
-              Wyrównanie do krawędzi
+              Wyrównanie do krawędzi elementu
             </span>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 ml-6 -mt-1">
+            Wybierz tryb i kliknij na powierzchnię elementu
+          </p>
           <div className="flex gap-2 ml-6">
             <button
               onClick={() => onAlignToEdgeChange('none')}
@@ -114,11 +117,14 @@ const DimensionOptionsPanel = ({
               ⊥ Prostopadle
             </button>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 ml-6">
-            {alignToEdgeMode === 'none' && 'Wybierz tryb i kliknij na krawędź jako odniesienie'}
-            {alignToEdgeMode === 'parallel' && '🟢 Kliknij krawędź → wymiar będzie równoległy'}
-            {alignToEdgeMode === 'perpendicular' && '🟣 Kliknij krawędź → wymiar będzie prostopadły'}
-          </p>
+          {alignToEdgeMode !== 'none' && (
+            <div className="ml-6 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">
+                {alignToEdgeMode === 'parallel' && '🟢 Wymiar będzie równoległy do powierzchni'}
+                {alignToEdgeMode === 'perpendicular' && '🟣 Wymiar będzie prostopadły do powierzchni'}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

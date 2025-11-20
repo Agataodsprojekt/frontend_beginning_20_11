@@ -223,14 +223,43 @@ export class SimpleDimensionTool {
     console.log('📏 Click point:', clickPoint);
     console.log('📏 Intersected object:', intersect.object);
 
-    // Znajdź najbliższą krawędź
-    const edge = this.findNearestEdge(clickPoint, intersect.object);
-    if (!edge) {
-      console.log('📏 No edge found near click point');
-      return;
-    }
+    // Pobierz normalną powierzchni z przecięcia
+    let edgeDirection: THREE.Vector3;
     
-    console.log('📏 Edge found!', edge);
+    if (intersect.face) {
+      // Użyj normalnej powierzchni do określenia kierunku krawędzi
+      const normal = intersect.face.normal.clone();
+      if (intersect.object instanceof THREE.Mesh) {
+        normal.transformDirection(intersect.object.matrixWorld);
+      }
+      
+      // Znajdź główną oś najbliższą do normalnej
+      const absNormal = new THREE.Vector3(
+        Math.abs(normal.x),
+        Math.abs(normal.y),
+        Math.abs(normal.z)
+      );
+      
+      // Wybierz kierunek prostopadły do normalnej (wzdłuż powierzchni)
+      if (absNormal.z > absNormal.x && absNormal.z > absNormal.y) {
+        // Normalna wzdłuż Z, więc krawędź w płaszczyźnie XY
+        edgeDirection = new THREE.Vector3(1, 0, 0);
+      } else if (absNormal.y > absNormal.x) {
+        // Normalna wzdłuż Y, więc krawędź w płaszczyźnie XZ
+        edgeDirection = new THREE.Vector3(1, 0, 0);
+      } else {
+        // Normalna wzdłuż X, więc krawędź w płaszczyźnie YZ
+        edgeDirection = new THREE.Vector3(0, 1, 0);
+      }
+    } else {
+      // Fallback - użyj osi X
+      edgeDirection = new THREE.Vector3(1, 0, 0);
+    }
+
+    // Utwórz widoczną linię krawędzi odniesienia
+    const edgeLength = 2.0; // Długość wizualizacji krawędzi
+    const start = clickPoint.clone().sub(edgeDirection.clone().multiplyScalar(edgeLength / 2));
+    const end = clickPoint.clone().add(edgeDirection.clone().multiplyScalar(edgeLength / 2));
 
     // Usuń poprzednią linię odniesienia jeśli istnieje
     if (this.referenceEdge?.line) {
@@ -239,10 +268,10 @@ export class SimpleDimensionTool {
 
     // Utwórz wizualizację krawędzi odniesienia
     const color = this.alignToEdgeMode === 'parallel' ? 0x4CAF50 : 0x9C27B0;
-    const lineGeometry = new THREE.BufferGeometry().setFromPoints([edge.start, edge.end]);
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([start, end]);
     const lineMaterial = new THREE.LineBasicMaterial({
       color: color,
-      linewidth: 3,
+      linewidth: 5,
       depthTest: false,
       depthWrite: false
     });
@@ -251,13 +280,14 @@ export class SimpleDimensionTool {
     this.scene.add(line);
 
     this.referenceEdge = {
-      start: edge.start,
-      end: edge.end,
-      direction: edge.direction,
+      start: start,
+      end: end,
+      direction: edgeDirection.normalize(),
       line: line
     };
 
-    console.log('📏 Reference edge selected:', this.alignToEdgeMode === 'parallel' ? 'PARALLEL' : 'PERPENDICULAR');
+    console.log('✅ Reference edge selected:', this.alignToEdgeMode === 'parallel' ? 'PARALLEL' : 'PERPENDICULAR');
+    console.log('📏 Edge direction:', edgeDirection);
     this.isSelectingEdge = false;
   }
 
@@ -433,17 +463,24 @@ export class SimpleDimensionTool {
   private getAlignedToEdgePoint(startPoint: THREE.Vector3, endPoint: THREE.Vector3): THREE.Vector3 {
     if (!this.referenceEdge) return endPoint;
 
-    const direction = this.referenceEdge.direction.clone();
+    const direction = this.referenceEdge.direction.clone().normalize();
+    const delta = new THREE.Vector3().subVectors(endPoint, startPoint);
     
     if (this.alignToEdgeMode === 'parallel') {
-      // Rzutuj wektor na kierunek krawędzi odniesienia
-      const delta = new THREE.Vector3().subVectors(endPoint, startPoint);
-      const projection = direction.multiplyScalar(delta.dot(direction));
-      return new THREE.Vector3().addVectors(startPoint, projection);
+      // Rzutuj wektor na kierunek krawędzi odniesienia (równolegle)
+      const projectionLength = delta.dot(direction);
+      const projection = direction.clone().multiplyScalar(projectionLength);
+      const result = new THREE.Vector3().addVectors(startPoint, projection);
+      
+      console.log('📏 Parallel alignment:', 
+        'Start:', startPoint, 
+        'End:', endPoint, 
+        'Aligned:', result,
+        'Direction:', direction);
+      
+      return result;
     } else if (this.alignToEdgeMode === 'perpendicular') {
       // Znajdź kierunek prostopadły do krawędzi odniesienia
-      const delta = new THREE.Vector3().subVectors(endPoint, startPoint);
-      
       // Utwórz płaszczyznę prostopadłą do krawędzi
       const perpDirection1 = new THREE.Vector3();
       if (Math.abs(direction.x) < 0.9) {
@@ -454,19 +491,27 @@ export class SimpleDimensionTool {
       
       const perpDirection2 = new THREE.Vector3().crossVectors(direction, perpDirection1).normalize();
       
-      // Rzutuj na płaszczyznę prostopadłą
+      // Rzutuj delta na oba kierunki prostopadłe
       const proj1 = delta.dot(perpDirection1);
       const proj2 = delta.dot(perpDirection2);
       
       // Wybierz dominujący kierunek prostopadły
       let perpVector: THREE.Vector3;
       if (Math.abs(proj1) > Math.abs(proj2)) {
-        perpVector = perpDirection1.multiplyScalar(proj1);
+        perpVector = perpDirection1.clone().multiplyScalar(proj1);
       } else {
-        perpVector = perpDirection2.multiplyScalar(proj2);
+        perpVector = perpDirection2.clone().multiplyScalar(proj2);
       }
       
-      return new THREE.Vector3().addVectors(startPoint, perpVector);
+      const result = new THREE.Vector3().addVectors(startPoint, perpVector);
+      
+      console.log('📏 Perpendicular alignment:', 
+        'Start:', startPoint, 
+        'End:', endPoint, 
+        'Aligned:', result,
+        'Direction:', direction);
+      
+      return result;
     }
 
     return endPoint;
@@ -541,6 +586,11 @@ export class SimpleDimensionTool {
       this.createMeasurement();
       this.clearPreview();
       this.clearSnapMarker();
+      
+      // Usuń markery punktów po utworzeniu wymiaru
+      this.markers.forEach((m) => this.scene.remove(m));
+      this.markers = [];
+      
       this.points = [];
     }
   }
