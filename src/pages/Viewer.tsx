@@ -194,19 +194,31 @@ const Viewer = () => {
     
     // Modyfikacja handleDimensionClick aby obsługiwać Ctrl+kliknięcie dla usuwania
     const handleDimensionClickWithDelete = (event: MouseEvent) => {
-      if (!dimensions.enabled || modelObjectsRef.current.length === 0) return;
+      if (!dimensions.enabled) return;
       
-      // Ctrl + kliknięcie = zaznacz wymiar do usunięcia
+      // Ctrl + kliknięcie = zaznacz wymiar do usunięcia (TYLKO to, nie dodawaj punktu!)
       if (event.ctrlKey || event.metaKey) {
+        console.log('🎯 Ctrl+click detected - trying to select measurement for deletion');
+        event.stopPropagation(); // Zatrzymaj propagację eventu
+        
+        // Wyczyść poprzednie zaznaczenie
+        if (selectedMeasurementToDelete) {
+          dimensions.highlightMeasurement(selectedMeasurementToDelete, false);
+        }
+        
         selectedMeasurementToDelete = dimensions.handleRightClick(event, modelObjectsRef.current);
         if (selectedMeasurementToDelete) {
-          console.log('📏 Measurement selected for deletion. Press Delete to remove.');
+          console.log('✅ Measurement selected for deletion. Press Delete to remove.');
           dimensions.highlightMeasurement(selectedMeasurementToDelete, true);
         } else {
-          console.log('📏 No measurement found at click position');
+          console.log('❌ No measurement found at click position');
         }
-      } else {
-        // Normalne kliknięcie = dodaj punkt wymiaru
+        return; // WAŻNE: Nie kontynuuj - nie dodawaj punktu!
+      }
+      
+      // Normalne kliknięcie = dodaj punkt wymiaru (tylko jeśli NIE było Ctrl)
+      if (modelObjectsRef.current.length > 0) {
+        console.log('➕ Normal click - adding dimension point');
         dimensions.handleClick(event, modelObjectsRef.current);
       }
     };

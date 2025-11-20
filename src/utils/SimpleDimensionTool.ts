@@ -39,8 +39,8 @@ export class SimpleDimensionTool {
     this.scene = scene;
     this.camera = camera;
     this.raycaster = new THREE.Raycaster();
-    this.raycaster.params.Line = { threshold: 0.5 }; // Zwiększony dla łatwiejszego klikania
-    this.raycaster.params.Points = { threshold: 0.5 };
+    this.raycaster.params.Line = { threshold: 1.0 }; // Duży threshold dla łatwiejszego klikania
+    this.raycaster.params.Points = { threshold: 1.0 };
   }
 
   public handleClick(event: MouseEvent, objects: THREE.Object3D[]): void {
@@ -857,19 +857,22 @@ export class SimpleDimensionTool {
 
   // Zaznaczanie wymiaru do usunięcia (Ctrl + kliknięcie)
   public handleRightClick(event: MouseEvent, objects: THREE.Object3D[]): THREE.Group | null {
+    console.log('🔍 handleRightClick called');
+    
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
 
+    console.log('🔍 Mouse position:', mouse.x.toFixed(3), mouse.y.toFixed(3));
     this.raycaster.setFromCamera(mouse, this.camera);
     
     // Sprawdź czy kliknięto w jakiś wymiar
     let nearestMeasurement: THREE.Group | null = null;
-    let minDistance = 1.0; // Zwiększony próg odległości dla łatwiejszego klikania
+    let minDistance = 5.0; // Bardzo duży próg dla łatwiejszego klikania
     
-    console.log('📏 Checking', this.measurements.length, 'measurements for selection');
+    console.log('🔍 Checking', this.measurements.length, 'measurements for selection');
 
     this.measurements.forEach((group) => {
       // Sprawdź odległość od każdego dziecka w grupie
