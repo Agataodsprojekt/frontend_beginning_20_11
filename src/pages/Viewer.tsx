@@ -5,6 +5,7 @@ import ActionBar from "../components/ActionBar";
 import CommentPanel from "../components/CommentPanel";
 import { useTheme } from "../contexts/ThemeContext";
 import { useComments } from "../hooks/useComments";
+import { SimpleDimensionTool } from "../utils/SimpleDimensionTool";
 
 const Viewer = () => {
   const viewerContainerRef = useRef<HTMLDivElement>(null);
@@ -16,7 +17,8 @@ const Viewer = () => {
   const { theme } = useTheme();
   const { comments, addComment, deleteComment, getAllComments } = useComments();
   const highlighterRef = useRef<OBC.FragmentHighlighter | null>(null);
-  const dimensionsRef = useRef<OBC.LengthMeasurement | null>(null);
+  const dimensionsRef = useRef<SimpleDimensionTool | null>(null);
+  const modelObjectsRef = useRef<THREE.Object3D[]>([]);
   
   // Stan dla pinowania elementów
   const [isPinMode, setIsPinMode] = useState(false);
@@ -136,28 +138,19 @@ const Viewer = () => {
     
     highlighterRef.current = highlighter;
 
-    // --- NARZĘDZIE WYMIAROWANIA ---
-    const dimensions = new OBC.LengthMeasurement(viewer);
-    dimensions.enabled = false; // Domyślnie wyłączone
-    dimensions.snapDistance = 0.25; // Dystans przyciągania do punktów
-    
-    // Event listener dla nowych wymiarów
-    dimensions.onBeforeCreate.add(() => {
-      console.log("📏 Starting new measurement...");
-    });
-    
-    dimensions.onAfterCreate.add((measurement: any) => {
-      console.log("📏 Measurement created:", measurement);
-      const length = measurement.distance;
-      console.log(`📏 Distance: ${length?.toFixed(3)} meters`);
-    });
-    
-    dimensions.onBeforeDelete.add((id: string) => {
-      console.log("📏 Deleting measurement:", id);
-    });
-    
+    // --- NARZĘDZIE WYMIAROWANIA (własna implementacja) ---
+    const dimensions = new SimpleDimensionTool(scene, cameraComponent.get());
     dimensionsRef.current = dimensions;
-    console.log("📏 Dimension tool initialized");
+    
+    // Event listener dla kliknięć w trybie wymiarowania
+    const handleDimensionClick = (event: MouseEvent) => {
+      if (dimensions.enabled && modelObjectsRef.current.length > 0) {
+        dimensions.handleClick(event, modelObjectsRef.current);
+      }
+    };
+    
+    viewerContainerRef.current.addEventListener('click', handleDimensionClick);
+    console.log("📏 Simple dimension tool initialized");
 
     const propertiesProcessor = new OBC.IfcPropertiesProcessor(viewer);
 
@@ -166,6 +159,16 @@ const Viewer = () => {
       // przetwarzanie właściwości
       propertiesProcessor.process(model);
       await highlighter.updateHighlight();
+      
+      // Zapisz obiekty modelu dla narzędzia wymiarowania
+      const meshes: THREE.Object3D[] = [];
+      model.items.forEach((item: any) => {
+        if (item.mesh) {
+          meshes.push(item.mesh);
+        }
+      });
+      modelObjectsRef.current = meshes;
+      console.log(`📏 Loaded ${meshes.length} objects for dimension tool`);
 
       // reagowanie na zaznaczenia
       highlighter.events.select.onHighlight.add(async (selection) => {
@@ -285,6 +288,9 @@ const Viewer = () => {
 
     // Cleanup function
     return () => {
+      if (viewerContainerRef.current) {
+        viewerContainerRef.current.removeEventListener('click', handleDimensionClick);
+      }
       if (viewerRef.current) {
         viewerRef.current.dispose();
         viewerRef.current = null;
@@ -447,13 +453,14 @@ const Viewer = () => {
       setIsDimensionMode(newDimensionMode);
       
       if (dimensionsRef.current) {
-        dimensionsRef.current.enabled = newDimensionMode;
-        console.log("📏 Dimension mode:", newDimensionMode);
-        
         if (newDimensionMode) {
+          dimensionsRef.current.enable();
           // Wyłącz pin mode jeśli jest aktywny
           setIsPinMode(false);
+        } else {
+          dimensionsRef.current.disable();
         }
+        console.log("📏 Dimension mode:", newDimensionMode);
       }
       return;
     }
