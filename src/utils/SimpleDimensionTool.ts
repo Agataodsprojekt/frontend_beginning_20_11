@@ -24,6 +24,7 @@ export class SimpleDimensionTool {
   private tempMarker: THREE.Mesh | null = null;
   private snapMarker: THREE.Mesh | null = null;
   public enabled: boolean = false;
+  public onMeasurementCreated: ((data: { group: THREE.Group; start: THREE.Vector3; end: THREE.Vector3 }) => void) | null = null;
 
   // Opcje wymiarowania
   public orthogonalMode: boolean = false;
@@ -652,6 +653,15 @@ export class SimpleDimensionTool {
     const group = this.createDimensionGroup(start, end, distance, false);
     this.scene.add(group);
     this.measurements.push(group);
+    
+    // Wywołaj callback jeśli jest ustawiony (dla undo/redo)
+    if (this.onMeasurementCreated) {
+      this.onMeasurementCreated({
+        group: group,
+        start: start.clone(),
+        end: end.clone()
+      });
+    }
   }
 
   private createDimensionGroup(
@@ -1016,6 +1026,60 @@ export class SimpleDimensionTool {
       this.measurements.splice(index, 1);
       console.log('📏 Measurement deleted');
     }
+  }
+
+  // Usunięcie bez powiadamiania (dla undo/redo)
+  public deleteMeasurementSilent(measurement: THREE.Group): void {
+    const index = this.measurements.indexOf(measurement);
+    if (index > -1) {
+      this.scene.remove(measurement);
+      this.measurements.splice(index, 1);
+    }
+  }
+
+  // Przywracanie wymiaru (dla undo/redo)
+  public restoreMeasurement(data: { group: THREE.Group; start: THREE.Vector3; end: THREE.Vector3 }): void {
+    this.scene.add(data.group);
+    this.measurements.push(data.group);
+  }
+
+  // Pobierz dane konkretnego wymiaru (dla zapisania w historii)
+  public getMeasurementData(group: THREE.Group): { group: THREE.Group; start: THREE.Vector3; end: THREE.Vector3 } | null {
+    // Znajdź punkty start i end z grupy
+    let start: THREE.Vector3 | null = null;
+    let end: THREE.Vector3 | null = null;
+    
+    group.children.forEach((child) => {
+      if (child instanceof THREE.Mesh && child.geometry instanceof THREE.SphereGeometry) {
+        if (!start) {
+          start = child.position.clone();
+        } else if (!end) {
+          end = child.position.clone();
+        }
+      }
+    });
+    
+    if (!start || !end) {
+      // Fallback - znajdź punkty z linii
+      group.children.forEach((child) => {
+        if (child instanceof THREE.Line) {
+          const positions = child.geometry.getAttribute('position');
+          if (positions && positions.count >= 2) {
+            start = new THREE.Vector3().fromBufferAttribute(positions, 0);
+            end = new THREE.Vector3().fromBufferAttribute(positions, 1);
+          }
+        }
+      });
+    }
+    
+    return start && end ? { group: group, start: start.clone(), end: end.clone() } : null;
+  }
+
+  // Pobierz dane ostatniego wymiaru (dla zapisania w historii)
+  public getLastMeasurementData(): { group: THREE.Group; start: THREE.Vector3; end: THREE.Vector3 } | null {
+    if (this.measurements.length === 0) return null;
+    const lastGroup = this.measurements[this.measurements.length - 1];
+    return this.getMeasurementData(lastGroup);
   }
 
   // Podświetlanie wymiaru (do zaznaczania przed usunięciem)

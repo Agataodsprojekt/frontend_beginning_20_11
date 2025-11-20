@@ -94,15 +94,27 @@ const Viewer = () => {
     commentsRef.current = comments;
   }, [comments]);
 
-  // Historia kamery dla undo/redo
+  // System historii akcji dla undo/redo
+  interface Action {
+    type: 'camera' | 'dimension_add' | 'dimension_delete';
+    data: any;
+    timestamp: number;
+  }
+  
   interface CameraState {
     position: THREE.Vector3;
     target: THREE.Vector3;
   }
   
-  const cameraHistory = useRef<CameraState[]>([]);
+  interface DimensionData {
+    group: THREE.Group;
+    start: THREE.Vector3;
+    end: THREE.Vector3;
+  }
+  
+  const actionHistory = useRef<Action[]>([]);
   const historyIndex = useRef<number>(-1);
-  const isRestoringCamera = useRef<boolean>(false);
+  const isRestoringState = useRef<boolean>(false);
 
   useEffect(() => {
     if (!viewerContainerRef.current || viewerRef.current) return;
@@ -181,6 +193,17 @@ const Viewer = () => {
     // --- NARZĘDZIE WYMIAROWANIA (własna implementacja) ---
     const dimensions = new SimpleDimensionTool(scene, cameraComponent.get());
     dimensionsRef.current = dimensions;
+    
+    // Callback wywoływany gdy wymiar jest tworzony (dla undo/redo)
+    dimensions.onMeasurementCreated = (dimensionData) => {
+      const action: Action = {
+        type: 'dimension_add',
+        data: dimensionData,
+        timestamp: Date.now(),
+      };
+      saveAction(action);
+      console.log('📏 Dimension saved to history');
+    };
     
     // Event listener dla ruchu myszy w trybie wymiarowania (podgląd)
     // Tylko pokazuj podgląd gdy Shift jest wciśnięty
@@ -262,9 +285,20 @@ const Viewer = () => {
           selectedMeasurementToDelete = null;
           console.log('📏 Current measurement canceled');
         } else if (event.key === 'Delete' && selectedMeasurementToDelete) {
+          // Zapisz dane wymiaru przed usunięciem (dla undo)
+          const dimensionData = dimensions.getMeasurementData(selectedMeasurementToDelete);
+          if (dimensionData) {
+            const action: Action = {
+              type: 'dimension_delete',
+              data: dimensionData,
+              timestamp: Date.now(),
+            };
+            saveAction(action);
+          }
+          
           dimensions.deleteMeasurement(selectedMeasurementToDelete);
           selectedMeasurementToDelete = null;
-          console.log('📏 Measurement deleted');
+          console.log('📏 Measurement deleted and saved to history');
         }
       }
     };
@@ -472,87 +506,128 @@ const Viewer = () => {
   }, [theme]);
 
   // Zapisz stan kamery
+  // Funkcja do zapisywania akcji w historii
+  const saveAction = (action: Action) => {
+    if (isRestoringState.current) return;
+    
+    // Usuń wszystkie akcje po aktualnym indeksie (jeśli użytkownik zrobił undo i potem nową akcję)
+    actionHistory.current = actionHistory.current.slice(0, historyIndex.current + 1);
+    
+    // Dodaj nową akcję
+    actionHistory.current.push(action);
+    historyIndex.current = actionHistory.current.length - 1;
+    
+    console.log(`💾 Action saved: ${action.type}, history size:`, actionHistory.current.length);
+  };
+  
   const saveCameraState = () => {
-    if (!viewerRef.current || isRestoringCamera.current) return;
+    if (!viewerRef.current || isRestoringState.current) return;
     
     const camera = viewerRef.current.camera as OBC.OrthoPerspectiveCamera;
     const controls = camera.controls;
     const threeCamera = camera.get() as THREE.PerspectiveCamera;
     
-    const newState: CameraState = {
+    const cameraState: CameraState = {
       position: threeCamera.position.clone(),
       target: controls.getTarget(new THREE.Vector3()).clone(),
     };
     
-    // Usuń wszystkie stany po aktualnym indeksie (jeśli użytkownik zrobił undo i potem nową akcję)
-    cameraHistory.current = cameraHistory.current.slice(0, historyIndex.current + 1);
+    const action: Action = {
+      type: 'camera',
+      data: cameraState,
+      timestamp: Date.now(),
+    };
     
-    // Dodaj nowy stan
-    cameraHistory.current.push(newState);
-    historyIndex.current = cameraHistory.current.length - 1;
-    
-    console.log("📷 Camera state saved, history size:", cameraHistory.current.length);
+    saveAction(action);
   };
 
-  // Undo - przywróć poprzedni stan kamery
+  // Undo - cofnij ostatnią akcję
   const handleUndo = () => {
-    if (historyIndex.current <= 0 || !viewerRef.current) {
+    if (historyIndex.current <= 0 || !viewerRef.current || !dimensionsRef.current) {
       console.log("⚠️ Cannot undo - at the beginning of history");
       return;
     }
     
     historyIndex.current--;
-    const state = cameraHistory.current[historyIndex.current];
+    const action = actionHistory.current[historyIndex.current];
     
-    console.log("⏪ Undo - restoring camera state", historyIndex.current);
-    isRestoringCamera.current = true;
+    console.log(`⏪ Undo - restoring state to: ${action.type}`, historyIndex.current);
+    isRestoringState.current = true;
     
-    const camera = viewerRef.current.camera as OBC.OrthoPerspectiveCamera;
-    const threeCamera = camera.get() as THREE.PerspectiveCamera;
-    threeCamera.position.copy(state.position);
-    camera.controls.setLookAt(
-      state.position.x,
-      state.position.y,
-      state.position.z,
-      state.target.x,
-      state.target.y,
-      state.target.z,
-      false
-    );
+    // Przywróć stan w zależności od typu akcji
+    if (action.type === 'camera') {
+      const cameraState = action.data as CameraState;
+      const camera = viewerRef.current.camera as OBC.OrthoPerspectiveCamera;
+      const threeCamera = camera.get() as THREE.PerspectiveCamera;
+      threeCamera.position.copy(cameraState.position);
+      camera.controls.setLookAt(
+        cameraState.position.x,
+        cameraState.position.y,
+        cameraState.position.z,
+        cameraState.target.x,
+        cameraState.target.y,
+        cameraState.target.z,
+        false
+      );
+    } else if (action.type === 'dimension_add') {
+      // Cofnij dodanie wymiaru = usuń ostatni wymiar
+      const dimensionData = action.data as DimensionData;
+      dimensionsRef.current.deleteMeasurementSilent(dimensionData.group);
+      console.log('⏪ Dimension removed (undo add)');
+    } else if (action.type === 'dimension_delete') {
+      // Cofnij usunięcie wymiaru = dodaj wymiar z powrotem
+      const dimensionData = action.data as DimensionData;
+      dimensionsRef.current.restoreMeasurement(dimensionData);
+      console.log('⏪ Dimension restored (undo delete)');
+    }
     
     setTimeout(() => {
-      isRestoringCamera.current = false;
+      isRestoringState.current = false;
     }, 100);
   };
 
-  // Redo - przywróć następny stan kamery
+  // Redo - przywróć cofniętą akcję
   const handleRedo = () => {
-    if (historyIndex.current >= cameraHistory.current.length - 1 || !viewerRef.current) {
+    if (historyIndex.current >= actionHistory.current.length - 1 || !viewerRef.current || !dimensionsRef.current) {
       console.log("⚠️ Cannot redo - at the end of history");
       return;
     }
     
     historyIndex.current++;
-    const state = cameraHistory.current[historyIndex.current];
+    const action = actionHistory.current[historyIndex.current];
     
-    console.log("⏩ Redo - restoring camera state", historyIndex.current);
-    isRestoringCamera.current = true;
+    console.log(`⏩ Redo - applying action: ${action.type}`, historyIndex.current);
+    isRestoringState.current = true;
     
-    const camera = viewerRef.current.camera as OBC.OrthoPerspectiveCamera;
-    const threeCamera = camera.get() as THREE.PerspectiveCamera;
-    threeCamera.position.copy(state.position);
-    camera.controls.setLookAt(
-      state.position.x,
-      state.position.y,
-      state.position.z,
-      state.target.x,
-      state.target.y,
-      state.target.z,
-      false
-    );
+    // Zastosuj akcję ponownie
+    if (action.type === 'camera') {
+      const cameraState = action.data as CameraState;
+      const camera = viewerRef.current.camera as OBC.OrthoPerspectiveCamera;
+      const threeCamera = camera.get() as THREE.PerspectiveCamera;
+      threeCamera.position.copy(cameraState.position);
+      camera.controls.setLookAt(
+        cameraState.position.x,
+        cameraState.position.y,
+        cameraState.position.z,
+        cameraState.target.x,
+        cameraState.target.y,
+        cameraState.target.z,
+        false
+      );
+    } else if (action.type === 'dimension_add') {
+      // Ponów dodanie wymiaru
+      const dimensionData = action.data as DimensionData;
+      dimensionsRef.current.restoreMeasurement(dimensionData);
+      console.log('⏩ Dimension restored (redo add)');
+    } else if (action.type === 'dimension_delete') {
+      // Ponów usunięcie wymiaru
+      const dimensionData = action.data as DimensionData;
+      dimensionsRef.current.deleteMeasurementSilent(dimensionData.group);
+      console.log('⏩ Dimension removed (redo delete)');
+    }
     
     setTimeout(() => {
-      isRestoringCamera.current = false;
+      isRestoringState.current = false;
     }, 100);
   };
 
