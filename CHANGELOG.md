@@ -111,6 +111,13 @@
   - Przygotowanie pod przyszłą funkcję wyszukiwania elementów w modelu
   - Tooltip: "Search elements in the model"
 
+#### Interakcja z Przyciskami
+- ✨ **Inteligentne przełączanie przycisków**
+  - Przyciski trybów (dimension, pin, search, comment, move) są teraz togglable
+  - Ponowne kliknięcie wyłącza narzędzie i wraca do trybu "move"
+  - Przyciski akcji jednorazowych (undo, redo, camera, share) nie zmieniają aktywnego trybu
+  - Koniec problemu z podświetlonymi przyciskami po wyłączeniu narzędzia
+
 #### Usunięte Elementy
 - ❌ Usunięto wskaźnik osi (X/Y/Z badge) z wymiarów ortogonalnych
 - ❌ Usunięto dużą niebieską podpowiedź na dole ekranu

@@ -23,8 +23,23 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
   const { theme, toggleTheme } = useTheme();
 
   const handleActionClick = (action: string) => {
-    setActiveAction(action);
-    onActionSelect?.(action);
+    // Przyciski jednorazowe (nie są trybami, tylko akcjami)
+    const oneTimeActions = ["undo", "redo", "camera", "share"];
+    
+    if (oneTimeActions.includes(action)) {
+      // Wykonaj akcję ale nie zmieniaj aktywnego trybu
+      onActionSelect?.(action);
+      return;
+    }
+    
+    // Przyciski trybów (togglable) - jeśli kliknięto ten sam, wyłącz go
+    if (activeAction === action) {
+      setActiveAction("move");
+      onActionSelect?.("move");
+    } else {
+      setActiveAction(action);
+      onActionSelect?.(action);
+    }
   };
 
   const handleThemeToggle = () => {
