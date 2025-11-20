@@ -118,6 +118,7 @@
 - **Interakcja z wynikami**
   - Kliknięcie na wynik → automatyczne zaznaczenie elementu w modelu 3D
   - Wyświetlenie właściwości zaznaczonego elementu w panelu Properties
+  - **Przycisk "+" → dodanie elementu do selekcji wielokrotnej** ⭐
   - Możliwość dodania komentarza do znalezionego elementu
   - Przycisk X lub wybór innego narzędzia zamyka panel
 
@@ -127,6 +128,47 @@
   - Maksymalna wysokość: 80vh (przewijanie wyników)
   - Ciemny/jasny motyw zgodny z resztą aplikacji
   - Ikona lupy w nagłówku i polu wyszukiwania
+
+#### 🎯 Selekcja Wielokrotna i Izolacja Elementów (Selection & Isolation Tool)
+- **Nowe narzędzie selekcji i izolacji elementów** ⭐
+  - Ikona warstw (Layers) na pasku narzędzi (przedostatnie miejsce)
+  - Panel zarządzania selekcją wielokrotną
+  - Funkcja izolacji widoku (ukrycie niewybranych elementów)
+  - Integracja z wyszukiwarką
+
+##### Selekcja Wielokrotna
+- **Ctrl + Klik** na elemencie w modelu → dodaje do selekcji
+- **Przycisk "+" w wyszukiwarce** → dodaje wynik do selekcji
+- Lista wszystkich wybranych elementów w panelu
+- Wyświetlanie: nazwa, typ IFC, Express ID
+- Licznik wybranych elementów
+
+##### Izolacja Widoku
+- **Przycisk "Izoluj"** → ukrywa wszystkie elementy oprócz wybranych
+  - Działa na poziomie fragmentów mesh
+  - Zachowuje pełną geometrię wybranych elementów
+  - Wydajne renderowanie (tylko wybrane elementy)
+- **Przycisk "Pokaż wszystkie"** → przywraca widoczność wszystkich elementów
+- **Wskaźnik stanu izolacji** → "🔍 Widoczne tylko wybrane elementy"
+
+##### Zarządzanie Selekcją
+- **Kliknięcie na element w liście** → podświetlenie w modelu 3D
+- **Przycisk X na elemencie** → usunięcie z selekcji (pojedynczo)
+- **Przycisk kosza** → wyczyszczenie całej selekcji
+- **Automatyczne zamknięcie panelu** → przy wyborze innego narzędzia
+
+##### Wygląd i UX
+- Panel po prawej stronie (obok wyszukiwarki)
+- Fioletowa kolorystyka (odróżnienie od innych paneli)
+- Przyciski akcji: niebieski (Izoluj), zielony (Unisolate), czerwony (Wyczyść)
+- Komunikat gdy brak elementów: "Kliknij elementy z Ctrl lub użyj wyszukiwarki"
+- Tooltips dla wszystkich przycisków
+
+##### Przypadki Użycia
+1. **Analiza konstruk cji** → wybór wszystkich słupów → izolacja → pomiary
+2. **Kontrola instalacji** → wyszukanie "pipe" → dodanie do selekcji → izolacja
+3. **Prezentacja** → wybór konkretnych elementów → ukrycie reszty
+4. **Koordynacja** → izolacja elementów na styku branż
 
 ### 🔧 Poprawki i Ulepszenia
 

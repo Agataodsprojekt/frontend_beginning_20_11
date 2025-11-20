@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Share2,
   Search,
+  Layers,
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import DimensionIcon from "./icons/DimensionIcon";
@@ -94,6 +95,12 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
       label: "Comment",
       icon: MessageCircle,
       tooltip: "Add comments to the model",
+    },
+    {
+      id: "selection",
+      label: "Selection",
+      icon: Layers,
+      tooltip: "Select and isolate elements",
     },
     {
       id: "share",

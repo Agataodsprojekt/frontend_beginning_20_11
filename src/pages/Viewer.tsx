@@ -5,6 +5,7 @@ import ActionBar from "../components/ActionBar";
 import CommentPanel from "../components/CommentPanel";
 import DimensionOptionsPanel from "../components/DimensionOptionsPanel";
 import { SearchPanel } from "../components/SearchPanel";
+import { SelectionPanel, SelectedElement } from "../components/SelectionPanel";
 import { useTheme } from "../contexts/ThemeContext";
 import { useComments } from "../hooks/useComments";
 import { SimpleDimensionTool } from "../utils/SimpleDimensionTool";
@@ -39,6 +40,14 @@ const Viewer = () => {
   const [showSearchPanel, setShowSearchPanel] = useState(false);
   const loadedModelsRef = useRef<any[]>([]);
   
+  // Stan dla selekcji i izolacji
+  const [showSelectionPanel, setShowSelectionPanel] = useState(false);
+  const [selectedElements, setSelectedElements] = useState<SelectedElement[]>([]);
+  const [isIsolated, setIsIsolated] = useState(false);
+  const hiddenFragmentsRef = useRef<Map<string, Set<number>>>(new Map());
+  const showSelectionPanelRef = useRef(showSelectionPanel);
+  const isCtrlPressedRef = useRef(false);
+  
   useEffect(() => {
     isPinModeRef.current = isPinMode;
   }, [isPinMode]);
@@ -46,6 +55,10 @@ const Viewer = () => {
   useEffect(() => {
     selectedPinColorRef.current = selectedPinColor;
   }, [selectedPinColor]);
+  
+  useEffect(() => {
+    showSelectionPanelRef.current = showSelectionPanel;
+  }, [showSelectionPanel]);
   
   // Synchronizuj opcje wymiarowania z narzędziem
   useEffect(() => {
@@ -281,6 +294,11 @@ const Viewer = () => {
     
     // Event listener dla klawisza ESC (anulowanie bieżącego wymiaru) i Delete (usuwanie)
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Śledź Ctrl
+      if (event.key === 'Control' || event.ctrlKey) {
+        isCtrlPressedRef.current = true;
+      }
+      
       if (dimensions.enabled) {
         if (event.key === 'Escape') {
           dimensions.cancelCurrentMeasurement();
@@ -308,9 +326,17 @@ const Viewer = () => {
       }
     };
     
+    // Event listener dla puszczenia Ctrl
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Control') {
+        isCtrlPressedRef.current = false;
+      }
+    };
+    
     viewerContainerRef.current.addEventListener('click', handleDimensionClickWithDelete);
     viewerContainerRef.current.addEventListener('mousemove', handleDimensionMove);
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
     console.log("📏 Simple dimension tool initialized");
 
     // Pętla aktualizacji dla wymiarów (skalowanie etykiet względem kamery)
@@ -350,6 +376,13 @@ const Viewer = () => {
         const fragmentID = Object.keys(selection)[0];
         const expressID = Number([...selection[fragmentID]][0]);
         const elementIdStr = expressID.toString();
+        
+        // Jeśli Ctrl jest wciśnięty i panel selekcji jest otwarty, dodaj do selekcji
+        if (isCtrlPressedRef.current && showSelectionPanelRef.current) {
+          console.log("🎯 Ctrl+click - adding element to selection:", expressID);
+          addToSelection(expressID);
+          return; // Nie wykonuj innych akcji
+        }
         
         // Jeśli tryb pinowania jest aktywny, zapinuj element
         if (isPinModeRef.current) {
@@ -468,6 +501,7 @@ const Viewer = () => {
         viewerContainerRef.current.removeEventListener('mousemove', handleDimensionMove);
       }
       document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -775,6 +809,151 @@ const Viewer = () => {
     }
   };
 
+  // Funkcje zarządzania selekcją
+  const addToSelection = async (expressID: number) => {
+    // Sprawdź czy element już jest w selekcji
+    if (selectedElements.some(el => el.expressID === expressID)) {
+      console.log('Element already in selection:', expressID);
+      return;
+    }
+
+    // Pobierz informacje o elemencie
+    let elementInfo: SelectedElement | null = null;
+    
+    for (const model of loadedModelsRef.current) {
+      try {
+        const properties = await model.getProperties(expressID);
+        if (properties) {
+          elementInfo = {
+            expressID,
+            name: properties.Name?.value || properties.type || `Element ${expressID}`,
+            type: properties.type || 'Unknown',
+          };
+          break;
+        }
+      } catch (error) {
+        // Próbuj następny model
+      }
+    }
+
+    if (elementInfo) {
+      setSelectedElements(prev => [...prev, elementInfo!]);
+      console.log('✅ Added to selection:', elementInfo);
+    }
+  };
+
+  const removeFromSelection = (expressID: number) => {
+    setSelectedElements(prev => prev.filter(el => el.expressID !== expressID));
+    console.log('❌ Removed from selection:', expressID);
+  };
+
+  const clearSelection = () => {
+    setSelectedElements([]);
+    console.log('🗑️ Cleared selection');
+  };
+
+  const isolateElements = async () => {
+    if (!highlighterRef.current || selectedElements.length === 0) return;
+
+    try {
+      const highlighter = highlighterRef.current;
+      const selectedIDs = new Set(selectedElements.map(el => el.expressID));
+      
+      // Przejdź przez wszystkie fragmenty i ukryj te, które nie są wybrane
+      for (const model of loadedModelsRef.current) {
+        for (const fragment of model.items) {
+          const fragmentId = fragment.fragment.id;
+          const allIDs = fragment.ids || new Set();
+          const idsToHide = new Set<number>();
+          
+          // Znajdź wszystkie ID które nie są w selekcji
+          allIDs.forEach((id: number) => {
+            if (!selectedIDs.has(id)) {
+              idsToHide.add(id);
+            }
+          });
+          
+          if (idsToHide.size > 0) {
+            // Zapisz ukryte fragmenty do późniejszego przywrócenia
+            hiddenFragmentsRef.current.set(fragmentId, idsToHide);
+            
+            // Ukryj elementy
+            await highlighter.highlightByID('clear', {
+              [fragmentId]: idsToHide
+            });
+            
+            // Ustaw przezroczystość lub ukryj
+            fragment.fragment.mesh.traverse((child: any) => {
+              if (child.isMesh && idsToHide.has(child.userData?.expressID)) {
+                child.visible = false;
+              }
+            });
+          }
+        }
+      }
+      
+      setIsIsolated(true);
+      console.log('🔍 Isolated', selectedElements.length, 'elements');
+    } catch (error) {
+      console.error('Error isolating elements:', error);
+    }
+  };
+
+  const unisolateElements = async () => {
+    if (!highlighterRef.current) return;
+
+    try {
+      // Przywróć widoczność wszystkich ukrytych elementów
+      for (const model of loadedModelsRef.current) {
+        for (const fragment of model.items) {
+          fragment.fragment.mesh.traverse((child: any) => {
+            if (child.isMesh) {
+              child.visible = true;
+            }
+          });
+        }
+      }
+      
+      // Wyczyść zapisane ukryte fragmenty
+      hiddenFragmentsRef.current.clear();
+      setIsIsolated(false);
+      console.log('👁️ Unisolated - showing all elements');
+    } catch (error) {
+      console.error('Error unisolating elements:', error);
+    }
+  };
+
+  const handleSelectionElementClick = async (expressID: number) => {
+    // Podświetl element w modelu
+    if (!highlighterRef.current || loadedModelsRef.current.length === 0) return;
+
+    try {
+      const highlighter = highlighterRef.current;
+      
+      // Znajdź fragment zawierający ten element
+      let foundFragment = null;
+      for (const model of loadedModelsRef.current) {
+        for (const fragment of model.items) {
+          if (fragment.ids && fragment.ids.includes(expressID)) {
+            foundFragment = fragment;
+            break;
+          }
+        }
+        if (foundFragment) break;
+      }
+
+      if (foundFragment) {
+        highlighter.clear();
+        const fragmentIdMap: { [key: string]: Set<number> } = {
+          [foundFragment.fragment.id]: new Set([expressID])
+        };
+        await highlighter.highlightByID('select', fragmentIdMap);
+      }
+    } catch (error) {
+      console.error('Error highlighting element from selection:', error);
+    }
+  };
+
   const handleActionSelect = (action: string) => {
     setActiveAction(action);
     console.log("Selected action:", action);
@@ -849,6 +1028,19 @@ const Viewer = () => {
     if (showSearchPanel && action !== "search") {
       setShowSearchPanel(false);
       console.log("🔍 Search panel disabled");
+    }
+    
+    // Obsługa Selection (selekcja i izolacja)
+    if (action === "selection") {
+      setShowSelectionPanel(true);
+      console.log("🎯 Selection panel enabled");
+      return;
+    }
+    
+    // Wyłącz panel selekcji gdy wybrana jest inna akcja lub move
+    if (showSelectionPanel && action !== "selection") {
+      setShowSelectionPanel(false);
+      console.log("🎯 Selection panel disabled");
     }
     
     // TODO: Implement other action handlers
@@ -1247,6 +1439,21 @@ const Viewer = () => {
           onClose={() => setShowSearchPanel(false)}
           onSelectElement={handleSearchSelect}
           searchFunction={searchElements}
+          onAddToSelection={addToSelection}
+        />
+      )}
+
+      {/* Panel selekcji i izolacji */}
+      {showSelectionPanel && (
+        <SelectionPanel
+          selectedElements={selectedElements}
+          isIsolated={isIsolated}
+          onClose={() => setShowSelectionPanel(false)}
+          onRemoveElement={removeFromSelection}
+          onClearSelection={clearSelection}
+          onIsolate={isolateElements}
+          onUnisolate={unisolateElements}
+          onSelectElement={handleSelectionElementClick}
         />
       )}
 

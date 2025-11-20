@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 
 interface SearchResult {
   expressID: number;
@@ -12,12 +12,14 @@ interface SearchPanelProps {
   onClose: () => void;
   onSelectElement: (expressID: number) => void;
   searchFunction: (query: string) => Promise<SearchResult[]>;
+  onAddToSelection?: (expressID: number) => void;
 }
 
 export const SearchPanel: React.FC<SearchPanelProps> = ({ 
   onClose, 
   onSelectElement,
-  searchFunction 
+  searchFunction,
+  onAddToSelection 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -148,16 +150,27 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                         {result.type} • ID: {result.expressID}
                       </div>
                     </button>
-                    <button
-                      onClick={() => toggleExpanded(result.expressID)}
-                      className="ml-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                    >
-                      {expandedResults.has(result.expressID) ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4" />
+                    <div className="flex items-center gap-1 ml-2">
+                      {onAddToSelection && (
+                        <button
+                          onClick={() => onAddToSelection(result.expressID)}
+                          className="p-1 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded transition-colors"
+                          title="Dodaj do selekcji"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
                       )}
-                    </button>
+                      <button
+                        onClick={() => toggleExpanded(result.expressID)}
+                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      >
+                        {expandedResults.has(result.expressID) ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {expandedResults.has(result.expressID) && (
