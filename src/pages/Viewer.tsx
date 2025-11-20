@@ -654,9 +654,15 @@ const Viewer = () => {
     
     // Obsługa Pin
     if (action === "pin") {
-      setIsPinMode((prev) => !prev);
-      console.log("📌 Pin mode:", !isPinMode);
+      setIsPinMode(true);
+      console.log("📌 Pin mode enabled");
       return;
+    }
+    
+    // Wyłącz pin mode gdy wybrana jest inna akcja lub move
+    if (isPinMode && action !== "pin") {
+      setIsPinMode(false);
+      console.log("📌 Pin mode disabled");
     }
     
     // Obsługa Dimension (wymiarowanie)

@@ -118,6 +118,11 @@
   - Przyciski akcji jednorazowych (undo, redo, camera, share) nie zmieniają aktywnego trybu
   - Koniec problemu z podświetlonymi przyciskami po wyłączeniu narzędzia
 
+- 📌 **Naprawa panelu wyboru koloru pinezki**
+  - Panel wyboru koloru pinezki teraz poprawnie znika po wyłączeniu przycisku pinezki
+  - Panel zamyka się również przy wyborze innego narzędzia
+  - Synchronizacja stanu przycisku z widocznością panelu
+
 #### Usunięte Elementy
 - ❌ Usunięto wskaźnik osi (X/Y/Z badge) z wymiarów ortogonalnych
 - ❌ Usunięto dużą niebieską podpowiedź na dole ekranu
