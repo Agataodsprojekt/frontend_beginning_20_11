@@ -16,6 +16,7 @@ const Viewer = () => {
   const { theme } = useTheme();
   const { comments, addComment, deleteComment, getAllComments } = useComments();
   const highlighterRef = useRef<OBC.FragmentHighlighter | null>(null);
+  const dimensionsRef = useRef<OBC.LengthMeasurement | null>(null);
   
   // Stan dla pinowania elementów
   const [isPinMode, setIsPinMode] = useState(false);
@@ -23,6 +24,9 @@ const Viewer = () => {
   const [pinnedElements, setPinnedElements] = useState<Map<string, string>>(new Map());
   const isPinModeRef = useRef(isPinMode);
   const selectedPinColorRef = useRef(selectedPinColor);
+  
+  // Stan dla wymiarowania
+  const [isDimensionMode, setIsDimensionMode] = useState(false);
   
   useEffect(() => {
     isPinModeRef.current = isPinMode;
@@ -132,6 +136,13 @@ const Viewer = () => {
     
     highlighterRef.current = highlighter;
 
+    // --- NARZĘDZIE WYMIAROWANIA ---
+    const dimensions = new OBC.LengthMeasurement(viewer);
+    dimensions.enabled = false; // Domyślnie wyłączone
+    dimensions.snapDistance = 0.25; // Dystans przyciągania do punktów
+    dimensionsRef.current = dimensions;
+    console.log("📏 Dimension tool initialized");
+
     const propertiesProcessor = new OBC.IfcPropertiesProcessor(viewer);
 
     // --- Po wczytaniu modelu ---
@@ -184,12 +195,14 @@ const Viewer = () => {
                 
                 // Upewnij się że materiał używa kolorów instancji
                 if (mesh.material) {
-                  const material = mesh.material as THREE.Material & { vertexColors?: boolean };
-                  if (!material.vertexColors) {
-                    material.vertexColors = true;
-                    material.needsUpdate = true;
-                    console.log("📌 Enabled vertexColors on material");
-                  }
+                  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                  materials.forEach((mat: any) => {
+                    if (mat && !mat.vertexColors) {
+                      mat.vertexColors = true;
+                      mat.needsUpdate = true;
+                      console.log("📌 Enabled vertexColors on material");
+                    }
+                  });
                 }
                 
                 // Ustaw kolor dla każdej instancji w tym fragmencie
@@ -412,8 +425,24 @@ const Viewer = () => {
       return;
     }
     
+    // Obsługa Dimension (wymiarowanie)
+    if (action === "dimension") {
+      const newDimensionMode = !isDimensionMode;
+      setIsDimensionMode(newDimensionMode);
+      
+      if (dimensionsRef.current) {
+        dimensionsRef.current.enabled = newDimensionMode;
+        console.log("📏 Dimension mode:", newDimensionMode);
+        
+        if (newDimensionMode) {
+          // Wyłącz pin mode jeśli jest aktywny
+          setIsPinMode(false);
+        }
+      }
+      return;
+    }
+    
     // TODO: Implement other action handlers
-    // - dimensions: use measurement tools
     // - camera: capture screenshots
   };
 

@@ -57,6 +57,12 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
       tooltip: "Mark and pin important elements",
     },
     {
+      id: "dimension",
+      label: "Dimension",
+      icon: Ruler,
+      tooltip: "Measure distances and dimensions",
+    },
+    {
       id: "lighting",
       label: "Lighting",
       icon: Lightbulb,
