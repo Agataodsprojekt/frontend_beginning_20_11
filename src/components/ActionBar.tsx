@@ -9,7 +9,7 @@ import {
   Camera,
   MessageCircle,
   Share2,
-  Lightbulb,
+  Search,
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import DimensionIcon from "./icons/DimensionIcon";
@@ -63,10 +63,10 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
       tooltip: "Measure distances and dimensions",
     },
     {
-      id: "lighting",
-      label: "Lighting",
-      icon: Lightbulb,
-      tooltip: "Adjust lighting and environment",
+      id: "search",
+      label: "Search",
+      icon: Search,
+      tooltip: "Search elements in the model",
     },
     {
       id: "camera",

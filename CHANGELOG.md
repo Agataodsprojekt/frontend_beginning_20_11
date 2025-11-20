@@ -97,12 +97,19 @@
 
 ### 🔧 Poprawki i Ulepszenia
 
-#### Ikona Narzędzia Wymiarowania
+#### Ikony Narzędzi
 - ✨ **Nowa ikona wymiarowania ze strzałkami**
   - Symbol ze strzałkami w lewo i prawo
   - Litera "X" nad symbolem
+  - Zwiększona grubość linii (strokeWidth: 2.5)
+  - Większe wymiary dla lepszej widoczności
   - Profesjonalny wygląd symbolu wymiarowania
   - Zgodny z międzynarodowymi standardami CAD
+
+- 🔍 **Zmiana ikony "Oświetlenie" na "Wyszukiwarkę"**
+  - Żarówka (Lightbulb) → Lupa (Search)
+  - Przygotowanie pod przyszłą funkcję wyszukiwania elementów w modelu
+  - Tooltip: "Search elements in the model"
 
 #### Usunięte Elementy
 - ❌ Usunięto wskaźnik osi (X/Y/Z badge) z wymiarów ortogonalnych
