@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 
+interface SnapPoint {
+  position: THREE.Vector3;
+  type: 'vertex' | 'edge' | 'midpoint' | 'center';
+  normal?: THREE.Vector3;
+}
+
 export class SimpleDimensionTool {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
@@ -9,35 +15,57 @@ export class SimpleDimensionTool {
   private markers: THREE.Mesh[] = [];
   private tempGroup: THREE.Group | null = null;
   private tempMarker: THREE.Mesh | null = null;
+  private snapMarker: THREE.Mesh | null = null;
   public enabled: boolean = false;
+
+  // Opcje wymiarowania
+  public orthogonalMode: boolean = false;
+  public snapToPoints: boolean = false;
+  private snapThreshold: number = 0.15; // Próg przyciągania w jednostkach modelu
 
   constructor(scene: THREE.Scene, camera: THREE.Camera) {
     this.scene = scene;
     this.camera = camera;
     this.raycaster = new THREE.Raycaster();
+    this.raycaster.params.Line = { threshold: 0.1 };
+    this.raycaster.params.Points = { threshold: 0.1 };
   }
 
   public handleClick(event: MouseEvent, objects: THREE.Object3D[]): void {
     if (!this.enabled) return;
 
-    const rect = (event.target as HTMLElement).getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
-    );
+    const point = this.getPoint(event, objects);
+    if (!point) return;
 
-    this.raycaster.setFromCamera(mouse, this.camera);
-    const intersects = this.raycaster.intersectObjects(objects, true);
-
-    if (intersects.length > 0) {
-      const point = intersects[0].point;
-      this.addPoint(point);
-    }
+    this.addPoint(point);
   }
 
   public handleMouseMove(event: MouseEvent, objects: THREE.Object3D[]): void {
-    if (!this.enabled || this.points.length !== 1) return;
+    if (!this.enabled) return;
 
+    const point = this.getPoint(event, objects);
+    if (!point) {
+      this.clearSnapMarker();
+      if (this.points.length === 1) {
+        this.clearPreview();
+      }
+      return;
+    }
+
+    // Pokaż snap marker jeśli snap jest włączony
+    if (this.snapToPoints && this.points.length < 2) {
+      this.showSnapMarker(point);
+    } else {
+      this.clearSnapMarker();
+    }
+
+    // Pokaż podgląd wymiaru
+    if (this.points.length === 1) {
+      this.updatePreview(point);
+    }
+  }
+
+  private getPoint(event: MouseEvent, objects: THREE.Object3D[]): THREE.Vector3 | null {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -47,9 +75,138 @@ export class SimpleDimensionTool {
     this.raycaster.setFromCamera(mouse, this.camera);
     const intersects = this.raycaster.intersectObjects(objects, true);
 
-    if (intersects.length > 0) {
-      const point = intersects[0].point;
-      this.updatePreview(point);
+    if (intersects.length === 0) return null;
+
+    let point = intersects[0].point.clone();
+
+    // Jeśli snap jest włączony, znajdź najbliższy punkt charakterystyczny
+    if (this.snapToPoints) {
+      const snapPoint = this.findNearestSnapPoint(point, intersects[0].object);
+      if (snapPoint) {
+        point = snapPoint.position;
+      }
+    }
+
+    // Jeśli tryb ortogonalny jest włączony i mamy już pierwszy punkt
+    if (this.orthogonalMode && this.points.length === 1) {
+      point = this.getOrthogonalPoint(this.points[0], point);
+    }
+
+    return point;
+  }
+
+  private findNearestSnapPoint(clickPoint: THREE.Vector3, object: THREE.Object3D): SnapPoint | null {
+    const snapPoints: SnapPoint[] = [];
+
+    // Zbierz wszystkie punkty charakterystyczne z geometrii
+    object.traverseAncestors((ancestor) => {
+      if (ancestor instanceof THREE.Mesh && ancestor.geometry) {
+        const geometry = ancestor.geometry;
+        const worldMatrix = ancestor.matrixWorld;
+
+        // Pobierz wierzchołki
+        const position = geometry.attributes.position;
+        if (position) {
+          const vertices: THREE.Vector3[] = [];
+          for (let i = 0; i < position.count; i++) {
+            const vertex = new THREE.Vector3();
+            vertex.fromBufferAttribute(position, i);
+            vertex.applyMatrix4(worldMatrix);
+            vertices.push(vertex);
+          }
+
+          // Dodaj wierzchołki
+          vertices.forEach(v => {
+            snapPoints.push({ position: v, type: 'vertex' });
+          });
+
+          // Dodaj środki krawędzi
+          for (let i = 0; i < vertices.length - 1; i++) {
+            const midpoint = new THREE.Vector3()
+              .addVectors(vertices[i], vertices[i + 1])
+              .multiplyScalar(0.5);
+            snapPoints.push({ position: midpoint, type: 'edge' });
+          }
+
+          // Dodaj środek geometrii
+          geometry.computeBoundingBox();
+          if (geometry.boundingBox) {
+            const center = new THREE.Vector3();
+            geometry.boundingBox.getCenter(center);
+            center.applyMatrix4(worldMatrix);
+            snapPoints.push({ position: center, type: 'center' });
+          }
+        }
+      }
+    });
+
+    // Znajdź najbliższy punkt w promieniu snapThreshold
+    let nearestPoint: SnapPoint | null = null;
+    let minDistance = this.snapThreshold;
+
+    snapPoints.forEach(sp => {
+      const distance = clickPoint.distanceTo(sp.position);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestPoint = sp;
+      }
+    });
+
+    return nearestPoint;
+  }
+
+  private getOrthogonalPoint(startPoint: THREE.Vector3, endPoint: THREE.Vector3): THREE.Vector3 {
+    const delta = new THREE.Vector3().subVectors(endPoint, startPoint);
+    
+    // Znajdź dominującą oś (największą różnicę)
+    const absDelta = new THREE.Vector3(
+      Math.abs(delta.x),
+      Math.abs(delta.y),
+      Math.abs(delta.z)
+    );
+
+    const orthogonalPoint = startPoint.clone();
+
+    // Wybierz kierunek z największą różnicą
+    if (absDelta.x >= absDelta.y && absDelta.x >= absDelta.z) {
+      // Wymiar wzdłuż osi X
+      orthogonalPoint.x = endPoint.x;
+    } else if (absDelta.y >= absDelta.x && absDelta.y >= absDelta.z) {
+      // Wymiar wzdłuż osi Y
+      orthogonalPoint.y = endPoint.y;
+    } else {
+      // Wymiar wzdłuż osi Z
+      orthogonalPoint.z = endPoint.z;
+    }
+
+    return orthogonalPoint;
+  }
+
+  private showSnapMarker(position: THREE.Vector3): void {
+    this.clearSnapMarker();
+
+    const geometry = new THREE.SphereGeometry(0.04, 16, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xFFD700, // Złoty kolor dla snap
+      transparent: true,
+      opacity: 0.8,
+      depthTest: false,
+      depthWrite: false
+    });
+    this.snapMarker = new THREE.Mesh(geometry, material);
+    this.snapMarker.position.copy(position);
+    this.snapMarker.renderOrder = 1001;
+    this.scene.add(this.snapMarker);
+
+    // Dodaj pulsujący efekt
+    const scale = 1 + Math.sin(Date.now() * 0.01) * 0.2;
+    this.snapMarker.scale.setScalar(scale);
+  }
+
+  private clearSnapMarker(): void {
+    if (this.snapMarker) {
+      this.scene.remove(this.snapMarker);
+      this.snapMarker = null;
     }
   }
 
@@ -66,6 +223,7 @@ export class SimpleDimensionTool {
     if (this.points.length === 2) {
       this.createMeasurement();
       this.clearPreview();
+      this.clearSnapMarker();
       this.points = [];
     }
   }
@@ -159,7 +317,66 @@ export class SimpleDimensionTool {
     label.position.copy(midPoint);
     group.add(label);
 
+    // Jeśli to wymiar ortogonalny, dodaj wskaźnik osi
+    if (this.orthogonalMode && !temporary) {
+      const axisLabel = this.getAxisLabel(start, end);
+      if (axisLabel) {
+        const axisSprite = this.createAxisIndicator(axisLabel, lineColor);
+        const labelOffset = new THREE.Vector3().subVectors(end, start).normalize().multiplyScalar(0.3);
+        axisSprite.position.copy(midPoint).add(labelOffset);
+        group.add(axisSprite);
+      }
+    }
+
     return group;
+  }
+
+  private getAxisLabel(start: THREE.Vector3, end: THREE.Vector3): string | null {
+    const delta = new THREE.Vector3().subVectors(end, start);
+    const threshold = 0.01;
+
+    if (Math.abs(delta.y) < threshold && Math.abs(delta.z) < threshold) return 'X';
+    if (Math.abs(delta.x) < threshold && Math.abs(delta.z) < threshold) return 'Y';
+    if (Math.abs(delta.x) < threshold && Math.abs(delta.y) < threshold) return 'Z';
+
+    return null;
+  }
+
+  private createAxisIndicator(axis: string, color: number): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) return new THREE.Sprite();
+
+    const scale = 2;
+    canvas.width = 64 * scale;
+    canvas.height = 64 * scale;
+
+    // Tło
+    context.fillStyle = `rgba(${(color >> 16) & 255}, ${(color >> 8) & 255}, ${color & 255}, 0.2)`;
+    context.beginPath();
+    context.arc(canvas.width / 2, canvas.height / 2, 28 * scale, 0, Math.PI * 2);
+    context.fill();
+
+    // Tekst
+    context.font = `Bold ${32 * scale}px Inter, Arial, sans-serif`;
+    context.fillStyle = '#ffffff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(axis, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    });
+
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.scale.set(0.2, 0.2, 1);
+    sprite.renderOrder = 1000;
+
+    return sprite;
   }
 
   private createArrow(
@@ -293,6 +510,7 @@ export class SimpleDimensionTool {
     
     // Usuń podgląd
     this.clearPreview();
+    this.clearSnapMarker();
     
     console.log('📏 All measurements cleared');
   }
@@ -307,6 +525,15 @@ export class SimpleDimensionTool {
     this.enabled = false;
     this.points = [];
     this.clearPreview();
+    this.clearSnapMarker();
     console.log('📏 Dimension tool disabled');
+  }
+
+  // Animacja snap markera
+  public updateSnapMarker(): void {
+    if (this.snapMarker) {
+      const scale = 1 + Math.sin(Date.now() * 0.01) * 0.2;
+      this.snapMarker.scale.setScalar(scale);
+    }
   }
 }

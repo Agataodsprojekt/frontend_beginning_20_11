@@ -3,6 +3,7 @@ import * as OBC from "openbim-components";
 import * as THREE from "three";
 import ActionBar from "../components/ActionBar";
 import CommentPanel from "../components/CommentPanel";
+import DimensionOptionsPanel from "../components/DimensionOptionsPanel";
 import { useTheme } from "../contexts/ThemeContext";
 import { useComments } from "../hooks/useComments";
 import { SimpleDimensionTool } from "../utils/SimpleDimensionTool";
@@ -29,6 +30,8 @@ const Viewer = () => {
   
   // Stan dla wymiarowania
   const [isDimensionMode, setIsDimensionMode] = useState(false);
+  const [dimensionOrthogonal, setDimensionOrthogonal] = useState(false);
+  const [dimensionSnap, setDimensionSnap] = useState(true); // Domyślnie włączone
   
   useEffect(() => {
     isPinModeRef.current = isPinMode;
@@ -37,6 +40,34 @@ const Viewer = () => {
   useEffect(() => {
     selectedPinColorRef.current = selectedPinColor;
   }, [selectedPinColor]);
+  
+  // Synchronizuj opcje wymiarowania z narzędziem
+  useEffect(() => {
+    if (dimensionsRef.current) {
+      dimensionsRef.current.orthogonalMode = dimensionOrthogonal;
+      console.log('📏 Orthogonal mode:', dimensionOrthogonal);
+    }
+  }, [dimensionOrthogonal]);
+  
+  useEffect(() => {
+    if (dimensionsRef.current) {
+      dimensionsRef.current.snapToPoints = dimensionSnap;
+      console.log('📏 Snap to points:', dimensionSnap);
+    }
+  }, [dimensionSnap]);
+  
+  // Animacja snap markera
+  useEffect(() => {
+    if (!isDimensionMode || !dimensionsRef.current) return;
+    
+    const animationInterval = setInterval(() => {
+      if (dimensionsRef.current) {
+        dimensionsRef.current.updateSnapMarker();
+      }
+    }, 50); // 20 FPS dla płynnej animacji
+    
+    return () => clearInterval(animationInterval);
+  }, [isDimensionMode]);
   
   // Dostępne kolory do pinowania - żywe, podstawowe kolory
   const pinColors = [
@@ -564,19 +595,30 @@ const Viewer = () => {
         border-radius: 8px;
       `;
 
-      // Nagłówek sekcji
+      // Nagłówek sekcji z możliwością rozwijania/zwijania
       const header = document.createElement('div');
     header.style.cssText = `
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 0px;
       padding-bottom: 8px;
       border-bottom: 1px solid hsl(var(--border));
       font-weight: 600;
       font-size: 14px;
       color: hsl(var(--foreground));
+      cursor: pointer;
+      user-select: none;
     `;
+      
+      const arrowIcon = document.createElement('span');
+      arrowIcon.innerHTML = '▼';
+      arrowIcon.style.cssText = `
+        transition: transform 0.2s;
+        font-size: 10px;
+        color: hsl(var(--muted-foreground));
+      `;
+      
       header.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: hsl(var(--primary))">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -584,7 +626,23 @@ const Viewer = () => {
         Komentarze (${elementComments.length})
         <span style="font-size: 10px; color: hsl(var(--muted-foreground)); margin-left: 8px;">ID: ${elementId}</span>
       `;
+      header.prepend(arrowIcon);
       commentsSection.appendChild(header);
+      
+      // Kontener na zawartość komentarzy
+      const contentContainer = document.createElement('div');
+      contentContainer.style.cssText = `
+        margin-top: 12px;
+        display: none;
+      `;
+      
+      // Funkcja rozwijania/zwijania
+      let isExpanded = false;
+      header.addEventListener('click', () => {
+        isExpanded = !isExpanded;
+        contentContainer.style.display = isExpanded ? 'block' : 'none';
+        arrowIcon.style.transform = isExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
+      });
 
       // Lista komentarzy lub komunikat o braku komentarzy
       if (elementComments.length > 0) {
@@ -645,7 +703,7 @@ const Viewer = () => {
             });
           }
 
-          commentsSection.appendChild(commentDiv);
+          contentContainer.appendChild(commentDiv);
         });
       } else {
         // Brak komentarzy - pokaż komunikat
@@ -659,7 +717,7 @@ const Viewer = () => {
         emptyState.innerHTML = `
           <p style="margin-bottom: 8px;">Brak komentarzy dla tego elementu</p>
         `;
-        commentsSection.appendChild(emptyState);
+        contentContainer.appendChild(emptyState);
       }
 
       // Dodaj hint o dodawaniu komentarzy
@@ -674,7 +732,10 @@ const Viewer = () => {
       hint.textContent = elementComments.length > 0 
         ? 'Otwórz panel komentarzy 💬 aby dodać więcej' 
         : 'Kliknij ikonę 💬 na pasku narzędzi aby dodać komentarz';
-      commentsSection.appendChild(hint);
+      contentContainer.appendChild(hint);
+      
+      // Dodaj kontener z zawartością do sekcji komentarzy
+      commentsSection.appendChild(contentContainer);
 
       // Dodaj sekcję do panelu Properties
       propertiesPanel.appendChild(commentsSection);
@@ -822,6 +883,15 @@ const Viewer = () => {
           onCommentClick={handleCommentClick}
         />
       )}
+
+      {/* Panel opcji wymiarowania */}
+      <DimensionOptionsPanel
+        isOpen={isDimensionMode}
+        orthogonalMode={dimensionOrthogonal}
+        snapToPoints={dimensionSnap}
+        onOrthogonalChange={setDimensionOrthogonal}
+        onSnapChange={setDimensionSnap}
+      />
 
     </div>
   );
