@@ -992,46 +992,6 @@ const Viewer = () => {
         onAlignToEdgeChange={setAlignToEdgeMode}
       />
 
-      {/* Wskazówka Shift - pokazuje się gdy wymiarowanie jest aktywne */}
-      {isDimensionMode && (
-        <div style={{
-          position: 'absolute',
-          bottom: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          backgroundColor: 'rgba(37, 99, 235, 0.95)',
-          color: 'white',
-          padding: '12px 20px',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '600',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          animation: 'pulse 2s ease-in-out infinite',
-        }}>
-          <span style={{ fontSize: '20px' }}>⌨️</span>
-          Trzymaj <kbd style={{
-            backgroundColor: 'white',
-            color: '#2563eb',
-            padding: '2px 8px',
-            borderRadius: '4px',
-            fontWeight: 'bold',
-            margin: '0 4px',
-          }}>SHIFT</kbd> i kliknij aby dodać punkt wymiaru
-        </div>
-      )}
-      
-      <style>
-        {`
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.8; }
-          }
-        `}
-      </style>
 
     </div>
   );

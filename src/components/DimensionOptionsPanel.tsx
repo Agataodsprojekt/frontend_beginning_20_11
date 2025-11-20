@@ -75,38 +75,40 @@ const DimensionOptionsPanel = ({
       }}
       className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-300 dark:border-gray-600 z-50 select-none"
     >
-      {/* Nagłówek z uchwytem do przeciągania */}
+      {/* Nagłówek z uchwytem do przeciągania - kompaktowy w wersji zwiniętej */}
       <div 
         onMouseDown={handleMouseDown}
-        className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-lg cursor-grab active:cursor-grabbing"
+        className={`flex items-center gap-1.5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-lg cursor-grab active:cursor-grabbing ${
+          isExpanded ? 'px-3 py-2' : 'px-2 py-1.5'
+        }`}
       >
-        <GripVertical className="w-4 h-4 text-white/70" />
-        <Settings className="w-4 h-4 text-white" />
-        <span className="text-sm font-semibold text-white flex-1">Wymiary</span>
+        <GripVertical className={isExpanded ? "w-4 h-4 text-white/70" : "w-3 h-3 text-white/70"} />
+        {isExpanded && <Settings className="w-4 h-4 text-white" />}
+        {isExpanded && <span className="text-sm font-semibold text-white flex-1">Wymiary</span>}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="text-white/80 hover:text-white transition-colors"
           title={isExpanded ? "Zwiń" : "Rozwiń"}
         >
-          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-3 h-3" />}
         </button>
       </div>
 
-      {/* Kompaktowa wersja - tylko ikonki */}
+      {/* Kompaktowa wersja - tylko ikonki, minimalistyczny design */}
       {!isExpanded && (
-        <div className="p-2 flex flex-col gap-2">
+        <div className="p-1.5 flex flex-col gap-1.5">
           {/* Wymiary ortogonalne */}
           <div className="group relative">
             <button
               onClick={() => onOrthogonalChange(!orthogonalMode)}
-              className={`w-10 h-10 flex items-center justify-center rounded-lg border-2 transition-all ${
+              className={`w-8 h-8 flex items-center justify-center rounded border transition-all ${
                 orthogonalMode
-                  ? 'bg-blue-500 border-blue-600 text-white shadow-md'
+                  ? 'bg-blue-500 border-blue-600 text-white shadow-sm'
                   : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400'
               }`}
               title="Wymiary ortogonalne"
             >
-              <Grid3x3 className="w-5 h-5" />
+              <Grid3x3 className="w-4 h-4" />
             </button>
             <div className="absolute left-full ml-2 top-0 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
               Wymiary ortogonalne (X, Y, Z)
@@ -117,39 +119,36 @@ const DimensionOptionsPanel = ({
           <div className="group relative">
             <button
               onClick={() => onSnapChange(!snapToPoints)}
-              className={`w-10 h-10 flex items-center justify-center rounded-lg border-2 transition-all ${
+              className={`w-8 h-8 flex items-center justify-center rounded border transition-all ${
                 snapToPoints
-                  ? 'bg-green-500 border-green-600 text-white shadow-md'
+                  ? 'bg-green-500 border-green-600 text-white shadow-sm'
                   : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-green-400'
               }`}
               title="Przyciąganie do punktów"
             >
-              <CircleDot className="w-5 h-5" />
+              <CircleDot className="w-4 h-4" />
             </button>
             <div className="absolute left-full ml-2 top-0 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
               Przyciąganie do punktów
             </div>
           </div>
 
-          {/* Separator */}
-          <div className="h-px bg-gray-300 dark:bg-gray-600 my-1"></div>
-
           {/* Wyrównanie do krawędzi - kompaktowe */}
           <div className="group relative">
             <button
               onClick={() => onAlignToEdgeChange(alignToEdgeMode === 'none' ? 'parallel' : alignToEdgeMode === 'parallel' ? 'perpendicular' : 'none')}
-              className={`w-10 h-10 flex items-center justify-center rounded-lg border-2 transition-all ${
+              className={`w-8 h-8 flex items-center justify-center rounded border transition-all ${
                 alignToEdgeMode === 'parallel'
-                  ? 'bg-green-500 border-green-600 text-white shadow-md'
+                  ? 'bg-green-500 border-green-600 text-white shadow-sm'
                   : alignToEdgeMode === 'perpendicular'
-                  ? 'bg-purple-500 border-purple-600 text-white shadow-md'
+                  ? 'bg-purple-500 border-purple-600 text-white shadow-sm'
                   : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400'
               }`}
               title="Wyrównanie do krawędzi"
             >
-              {alignToEdgeMode === 'parallel' && <ArrowRightLeft className="w-5 h-5" />}
-              {alignToEdgeMode === 'perpendicular' && <span className="text-lg font-bold">⊥</span>}
-              {alignToEdgeMode === 'none' && <Move className="w-5 h-5" />}
+              {alignToEdgeMode === 'parallel' && <ArrowRightLeft className="w-4 h-4" />}
+              {alignToEdgeMode === 'perpendicular' && <span className="text-base font-bold">⊥</span>}
+              {alignToEdgeMode === 'none' && <Move className="w-4 h-4" />}
             </button>
             <div className="absolute left-full ml-2 top-0 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
               {alignToEdgeMode === 'none' && 'Wyrównanie: wyłączone'}
