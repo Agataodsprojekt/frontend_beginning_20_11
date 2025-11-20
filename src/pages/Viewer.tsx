@@ -200,6 +200,16 @@ const Viewer = () => {
     viewerContainerRef.current.addEventListener('mousemove', handleDimensionMove);
     console.log("📏 Simple dimension tool initialized");
 
+    // Pętla aktualizacji dla wymiarów (skalowanie etykiet względem kamery)
+    let animationFrameId: number;
+    const updateLoop = () => {
+      if (dimensions) {
+        dimensions.update();
+      }
+      animationFrameId = requestAnimationFrame(updateLoop);
+    };
+    updateLoop();
+
     const propertiesProcessor = new OBC.IfcPropertiesProcessor(viewer);
 
     // --- Po wczytaniu modelu ---
@@ -339,6 +349,9 @@ const Viewer = () => {
       if (viewerContainerRef.current) {
         viewerContainerRef.current.removeEventListener('click', handleDimensionClick);
         viewerContainerRef.current.removeEventListener('mousemove', handleDimensionMove);
+      }
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
       if (viewerRef.current) {
         viewerRef.current.dispose();

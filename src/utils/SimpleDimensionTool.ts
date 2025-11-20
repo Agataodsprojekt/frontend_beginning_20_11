@@ -850,4 +850,48 @@ export class SimpleDimensionTool {
       this.snapMarker.scale.setScalar(scale);
     }
   }
+
+  // Aktualizacja wymiarów - skalowanie etykiet względem kamery
+  public update(): void {
+    // Aktualizuj wszystkie pomiary
+    this.measurements.forEach((group) => {
+      group.children.forEach((child) => {
+        if (child instanceof THREE.Sprite) {
+          this.updateSpriteScale(child);
+        }
+      });
+    });
+
+    // Aktualizuj podgląd tymczasowy
+    if (this.tempGroup) {
+      this.tempGroup.children.forEach((child) => {
+        if (child instanceof THREE.Sprite) {
+          this.updateSpriteScale(child);
+        }
+      });
+    }
+
+    // Aktualizuj snap marker
+    this.updateSnapMarker();
+  }
+
+  private updateSpriteScale(sprite: THREE.Sprite): void {
+    // Oblicz odległość od kamery
+    const distance = sprite.position.distanceTo(this.camera.position);
+    
+    // Podstawowa skala sprite'a
+    const baseScaleX = 0.8;
+    const baseScaleY = 0.25;
+    
+    // Współczynnik skalowania na podstawie odległości
+    // Im dalej, tym większy sprite (aby wyglądał na stałej wielkości)
+    const scaleFactor = distance * 0.15;
+    
+    // Zastosuj skalowanie
+    sprite.scale.set(
+      baseScaleX * scaleFactor,
+      baseScaleY * scaleFactor,
+      1
+    );
+  }
 }
