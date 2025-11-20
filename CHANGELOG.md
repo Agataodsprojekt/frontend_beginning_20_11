@@ -181,27 +181,34 @@
 ### 🔧 Poprawki i Ulepszenia
 
 #### Izolacja Elementów
-- ✅ **Naprawiono funkcję izolacji elementów (2 iteracje)**
+- ✅ **Naprawiono funkcję izolacji elementów (3 iteracje)**
   
   **Iteracja 1:**
   - Problem: elementy nie były ukrywane mimo kliknięcia "Izoluj"
   - Przyczyna: niepoprawna obsługa instancjonowanej geometrii w OpenBIM Components
   
-  **Iteracja 2 (finalna):**
+  **Iteracja 2:**
   - Problem: błąd `Cannot read properties of undefined (reading 'mesh')`
   - Przyczyna: błędne założenie o strukturze danych `model.items`
     - Kod próbował: `item.fragment.mesh` ❌
     - Powinno być: `item.mesh` ✅
   
-  **Rozwiązanie:**
-  - ✅ Poprawiona struktura dostępu do danych: `item.mesh`, `item.id`, `item.ids`
-  - ✅ Ukrywanie całych fragmentów gdy żaden element nie jest wybrany (`mesh.visible = false`)
-  - ✅ Częściowe ukrywanie poprzez manipulację `instanceColor`:
-    - Czarny kolor (RGB: 0,0,0) = element ukryty
-    - Biały kolor (RGB: 1,1,1) = element widoczny
-  - ✅ Automatyczne włączenie `vertexColors` na materiałach
-  - ✅ Funkcja `unisolateElements` przywraca wszystkie elementy na biały
-  - ✅ Szczegółowe logowanie do konsoli (✅, ❌, ⚠️)
+  **Iteracja 3 (finalna - pełne działanie!):**
+  - Problem: fragmenty mieszane (wybrane belki + niewybrane kolumny) były "fikcyjnie ukryte"
+    - Metoda `instanceColor` (czarny kolor) nie działała - elementy nadal widoczne jako ciemne sylwetki
+  - Przyczyna: czarny kolor (0,0,0) na ciemnym tle = ledwo widoczny, ale nie ukryty
+  
+  **Ostateczne Rozwiązanie:**
+  - ✅ **Pełne fragmenty**: `mesh.visible = false` (100% ukryte)
+  - ✅ **Fragmenty mieszane**: przesunięcie przez `instanceMatrix`
+    - Ukryte instancje przesuwane 10000 jednostek w dół (całkowicie poza widok)
+    - Zapisanie oryginalnych pozycji w `originalMatricesRef`
+    - Zachowanie rotacji i skali, zmiana tylko pozycji
+  - ✅ **Przywracanie**: odtworzenie oryginalnych pozycji z zapisanych matryc
+  - ✅ **100% skuteczność**: elementy całkowicie niewidoczne (nie tylko ciemne)
+  - ✅ **Działa na jasnym i ciemnym tle**
+  - ✅ **Odwracalne**: pełne przywrócenie oryginalnego stanu
+  - ✅ Szczegółowe logowanie do konsoli (✅, ❌, ⚠️, 💾)
 
 #### Ikony Narzędzi
 - ✨ **Nowa ikona wymiarowania ze strzałkami**

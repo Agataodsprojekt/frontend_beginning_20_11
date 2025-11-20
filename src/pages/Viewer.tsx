@@ -45,6 +45,7 @@ const Viewer = () => {
   const [selectedElements, setSelectedElements] = useState<SelectedElement[]>([]);
   const [isIsolated, setIsIsolated] = useState(false);
   const hiddenFragmentsRef = useRef<Map<string, Set<number>>>(new Map());
+  const originalMatricesRef = useRef<Map<string, Map<number, THREE.Matrix4>>>(new Map());
   const showSelectionPanelRef = useRef(showSelectionPanel);
   const isCtrlPressedRef = useRef(false);
   
@@ -903,55 +904,51 @@ const Viewer = () => {
             mesh.visible = true;
             console.log(`✅ Showing entire mesh ${fragmentId}`);
           }
-          // Jeśli część ma być ukryta - to jest trudniejsze z InstancedMesh
+          // Jeśli część ma być ukryta - przesuń ukryte instancje poza widok
           else {
-            // W przypadku częściowego ukrywania, musimy użyć triku z przezroczystością
-            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - using instanceColor trick`);
+            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - using matrix displacement`);
             mesh.visible = true;
             hiddenFragmentsRef.current.set(fragmentId, idsToHide);
             
             try {
-              // Utwórz lub zaktualizuj instanceColor
-              const count = allIDs.length;
-              
-              if (!mesh.instanceColor) {
-                console.log('Creating new instanceColor buffer');
-                const colors = new Float32Array(count * 3);
-                // Domyślnie wszystkie białe (widoczne)
-                for (let i = 0; i < count; i++) {
-                  colors[i * 3] = 1;
-                  colors[i * 3 + 1] = 1;
-                  colors[i * 3 + 2] = 1;
-                }
-                mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+              // Zapisz oryginalne matryce jeśli jeszcze nie zapisano
+              if (!originalMatricesRef.current.has(fragmentId)) {
+                const originalMatrices = new Map<number, THREE.Matrix4>();
+                allIDs.forEach((id: number, index: number) => {
+                  const matrix = new THREE.Matrix4();
+                  mesh.getMatrixAt(index, matrix);
+                  originalMatrices.set(id, matrix.clone());
+                });
+                originalMatricesRef.current.set(fragmentId, originalMatrices);
+                console.log(`💾 Saved ${originalMatrices.size} original matrices for fragment ${fragmentId}`);
               }
               
-              // Ustaw kolor na czarny (niewidoczny) dla ukrytych elementów
-              // Zachowaj biały dla widocznych
+              // Przesuń ukryte elementy 10000 jednostek w dół (całkowicie poza widok)
+              const matrix = new THREE.Matrix4();
+              const hiddenPosition = new THREE.Vector3(0, -10000, 0);
+              
               allIDs.forEach((id: number, index: number) => {
                 if (idsToHide.has(id)) {
-                  // Ukryty - czarny
-                  mesh.instanceColor.setXYZ(index, 0, 0, 0);
-                } else {
-                  // Widoczny - biały
-                  mesh.instanceColor.setXYZ(index, 1, 1, 1);
+                  // Pobierz oryginalną macierz
+                  mesh.getMatrixAt(index, matrix);
+                  
+                  // Zachowaj rotację i skalę, zmień tylko pozycję
+                  const position = new THREE.Vector3();
+                  const quaternion = new THREE.Quaternion();
+                  const scale = new THREE.Vector3();
+                  matrix.decompose(position, quaternion, scale);
+                  
+                  // Ustaw nową pozycję (10km w dół)
+                  matrix.compose(hiddenPosition, quaternion, scale);
+                  mesh.setMatrixAt(index, matrix);
                 }
+                // Widoczne elementy - zostaw ich oryginalne pozycje
               });
               
-              mesh.instanceColor.needsUpdate = true;
-              
-              // Upewnij się że materiał używa vertex colors
-              const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-              materials.forEach((mat: any) => {
-                if (mat) {
-                  mat.vertexColors = true;
-                  mat.needsUpdate = true;
-                }
-              });
-              
-              console.log(`✅ Applied instanceColor to ${idsToHide.size} hidden elements`);
+              mesh.instanceMatrix.needsUpdate = true;
+              console.log(`✅ Displaced ${idsToHide.size} elements outside view in fragment ${fragmentId}`);
             } catch (error) {
-              console.error('❌ Error applying instanceColor:', error);
+              console.error('❌ Error displacing instances:', error);
             }
           }
         }
@@ -982,28 +979,32 @@ const Viewer = () => {
           // Pokaż mesh
           mesh.visible = true;
           
-          // Przywróć kolory wszystkich elementów (biały = widoczny)
-          const hiddenIDs = hiddenFragmentsRef.current.get(fragmentId);
-          if (hiddenIDs && hiddenIDs.size > 0 && mesh.instanceColor) {
+          // Przywróć oryginalne pozycje elementów
+          const originalMatrices = originalMatricesRef.current.get(fragmentId);
+          if (originalMatrices && originalMatrices.size > 0) {
             try {
-              console.log(`Restoring ${hiddenIDs.size} elements in fragment ${fragmentId}`);
+              console.log(`Restoring ${originalMatrices.size} elements in fragment ${fragmentId}`);
               
-              // Przywróć wszystkie elementy na biały (widoczne)
-              allIDs.forEach((_id: number, index: number) => {
-                mesh.instanceColor.setXYZ(index, 1, 1, 1);
+              // Przywróć oryginalne pozycje ze zapisanych matryc
+              allIDs.forEach((id: number, index: number) => {
+                const originalMatrix = originalMatrices.get(id);
+                if (originalMatrix) {
+                  mesh.setMatrixAt(index, originalMatrix);
+                }
               });
               
-              mesh.instanceColor.needsUpdate = true;
-              console.log(`✅ Restored visibility for fragment ${fragmentId}`);
+              mesh.instanceMatrix.needsUpdate = true;
+              console.log(`✅ Restored original positions for fragment ${fragmentId}`);
             } catch (error) {
-              console.error('❌ Error restoring visibility in fragment:', error);
+              console.error('❌ Error restoring positions in fragment:', error);
             }
           }
         }
       }
       
-      // Wyczyść zapisane ukryte fragmenty
+      // Wyczyść zapisane ukryte fragmenty i matryce
       hiddenFragmentsRef.current.clear();
+      originalMatricesRef.current.clear();
       setIsIsolated(false);
       console.log('✅ Unisolation complete - all elements visible');
     } catch (error) {
