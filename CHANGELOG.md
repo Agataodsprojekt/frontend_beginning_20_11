@@ -172,6 +172,17 @@
 
 ### 🔧 Poprawki i Ulepszenia
 
+#### Izolacja Elementów
+- ✅ **Naprawiono funkcję izolacji elementów**
+  - Problem: elementy nie były ukrywane mimo kliknięcia "Izoluj"
+  - Przyczyna: niepoprawna obsługa instancjonowanej geometrii w OpenBIM Components
+  - Rozwiązanie: 
+    - Użycie `mesh.visible = false` dla całych fragmentów bez wybranych elementów
+    - Użycie `fragment.setVisibility()` dla częściowego ukrywania
+    - Fallback: manipulacja `instanceColor` dla starszych wersji
+  - Dodano szczegółowe logowanie do konsoli dla debugowania
+  - Poprawiono funkcję `unisolateElements` - prawidłowe przywracanie widoczności
+
 #### Ikony Narzędzi
 - ✨ **Nowa ikona wymiarowania ze strzałkami**
   - Symbol ze strzałkami w lewo i prawo
