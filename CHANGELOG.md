@@ -199,20 +199,27 @@
   - Próba naprawy: przesunięcie przez `instanceMatrix` (pozycja y=-10000)
     - NIE ZADZIAŁAŁO - elementy nadal widoczne, tylko w kolorze
   
-  **Iteracja 4 (finalna - scale trick!):**
-  - Problem: przesuwanie pozycji nie działa z OpenBIM InstancedMesh
-  - Przyczyna: OpenBIM może cachować pozycje lub ignorować zmiany pozycji
+  **Iteracja 4:**
+  - Problem: przesuwanie pozycji NIE DZIAŁA z OpenBIM InstancedMesh
+  - Próba: skalowanie (`scale ≈ 0`) - też NIE DZIAŁA
+  - Przyczyna: OpenBIM Components cachuje/ignoruje zmiany w `instanceMatrix`
   
-  **Ostateczne Rozwiązanie:**
-  - ✅ **Pełne fragmenty**: `mesh.visible = false` (100% ukryte)
-  - ✅ **Fragmenty mieszane**: skalowanie przez `instanceMatrix`
-    - Ukryte instancje: `scale = (0.00001, 0.00001, 0.00001)` → zkolapsowane do niewidzialnego punktu
-    - Zapisanie oryginalnych matryc w `originalMatricesRef`
-    - Zachowanie pozycji i rotacji, zmiana tylko skali
-  - ✅ **Przywracanie**: odtworzenie oryginalnych matryc (pozycja, rotacja, skala)
-  - ✅ **Działa niezależnie od tła**
-  - ✅ **Odwracalne**: pełne przywrócenie oryginalnego stanu
-  - ✅ Szczegółowe logowanie do konsoli (✅, ❌, ⚠️, 💾)
+  **Iteracja 5 (tymczasowe obejście - wymaga dalszej pracy):**
+  - ✅ **Pełne fragmenty** (tylko niewybrane): `mesh.visible = false` - **DZIAŁA IDEALNIE**
+  - ✅ **Pełne fragmenty** (tylko wybrane): `mesh.visible = true` - **DZIAŁA IDEALNIE**
+  - ⚠️ **Fragmenty mieszane** (wybrane + niewybrane w jednym mesh):
+    - Ukrywamy cały fragment (`mesh.visible = false`)
+    - **SKUTEK UBOCZNY**: ukrywane są też wybrane elementy z tego fragmentu
+    - To jest **TYMCZASOWE ROZWIĄZANIE**
+  
+  **Znane Ograniczenia:**
+  - ❌ Jeśli wybrane belki są w tym samym fragmencie co inne elementy - wszystkie zostaną ukryte
+  - 🔨 **WYMAGA DALSZEJ PRACY**: znaleźć sposób na częściowe ukrywanie instancji w OpenBIM
+  - 💡 Możliwe rozwiązania do zbadania:
+    - Custom shader z visibility attribute
+    - Podział fragmentów (fragment splitting)
+    - Użycie Three.js Layers
+    - Modify BVH (Bounding Volume Hierarchy)
 
 #### Ikony Narzędzi
 - ✨ **Nowa ikona wymiarowania ze strzałkami**
