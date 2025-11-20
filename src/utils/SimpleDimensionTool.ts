@@ -6,6 +6,13 @@ interface SnapPoint {
   normal?: THREE.Vector3;
 }
 
+interface EdgeReference {
+  start: THREE.Vector3;
+  end: THREE.Vector3;
+  direction: THREE.Vector3;
+  line: THREE.Line | null;
+}
+
 export class SimpleDimensionTool {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
@@ -21,7 +28,12 @@ export class SimpleDimensionTool {
   // Opcje wymiarowania
   public orthogonalMode: boolean = false;
   public snapToPoints: boolean = false;
+  public alignToEdgeMode: 'none' | 'parallel' | 'perpendicular' = 'none';
   private snapThreshold: number = 0.15; // Próg przyciągania w jednostkach modelu
+  
+  // Krawędź odniesienia
+  private referenceEdge: EdgeReference | null = null;
+  private isSelectingEdge: boolean = false;
 
   constructor(scene: THREE.Scene, camera: THREE.Camera) {
     this.scene = scene;
@@ -33,6 +45,12 @@ export class SimpleDimensionTool {
 
   public handleClick(event: MouseEvent, objects: THREE.Object3D[]): void {
     if (!this.enabled) return;
+
+    // Jeśli tryb wyrównania do krawędzi jest włączony i nie mamy jeszcze krawędzi odniesienia
+    if (this.alignToEdgeMode !== 'none' && !this.referenceEdge) {
+      this.selectReferenceEdge(event, objects);
+      return;
+    }
 
     const point = this.getPoint(event, objects);
     if (!point) return;
@@ -88,8 +106,13 @@ export class SimpleDimensionTool {
     }
 
     // Jeśli tryb ortogonalny jest włączony i mamy już pierwszy punkt
-    if (this.orthogonalMode && this.points.length === 1) {
+    if (this.orthogonalMode && this.points.length === 1 && !this.referenceEdge) {
       point = this.getOrthogonalPoint(this.points[0], point);
+    }
+
+    // Jeśli mamy krawędź odniesienia i już pierwszy punkt
+    if (this.referenceEdge && this.points.length === 1) {
+      point = this.getAlignedToEdgePoint(this.points[0], point);
     }
 
     return point;
@@ -153,6 +176,195 @@ export class SimpleDimensionTool {
     });
 
     return nearestPoint;
+  }
+
+  private selectReferenceEdge(event: MouseEvent, objects: THREE.Object3D[]): void {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    this.raycaster.setFromCamera(mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(objects, true);
+
+    if (intersects.length === 0) return;
+
+    const intersect = intersects[0];
+    const clickPoint = intersect.point;
+
+    // Znajdź najbliższą krawędź
+    const edge = this.findNearestEdge(clickPoint, intersect.object);
+    if (!edge) {
+      console.log('📏 No edge found near click point');
+      return;
+    }
+
+    // Usuń poprzednią linię odniesienia jeśli istnieje
+    if (this.referenceEdge?.line) {
+      this.scene.remove(this.referenceEdge.line);
+    }
+
+    // Utwórz wizualizację krawędzi odniesienia
+    const color = this.alignToEdgeMode === 'parallel' ? 0x4CAF50 : 0x9C27B0;
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([edge.start, edge.end]);
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: color,
+      linewidth: 3,
+      depthTest: false,
+      depthWrite: false
+    });
+    const line = new THREE.Line(lineGeometry, lineMaterial);
+    line.renderOrder = 997;
+    this.scene.add(line);
+
+    this.referenceEdge = {
+      start: edge.start,
+      end: edge.end,
+      direction: edge.direction,
+      line: line
+    };
+
+    console.log('📏 Reference edge selected:', this.alignToEdgeMode === 'parallel' ? 'PARALLEL' : 'PERPENDICULAR');
+    this.isSelectingEdge = false;
+  }
+
+  private findNearestEdge(clickPoint: THREE.Vector3, object: THREE.Object3D): { start: THREE.Vector3; end: THREE.Vector3; direction: THREE.Vector3 } | null {
+    let nearestEdge: { start: THREE.Vector3; end: THREE.Vector3; direction: THREE.Vector3 } | null = null;
+    let minDistance = this.snapThreshold * 2;
+
+    object.traverseAncestors((ancestor) => {
+      if (ancestor instanceof THREE.Mesh && ancestor.geometry) {
+        const geometry = ancestor.geometry;
+        const worldMatrix = ancestor.matrixWorld;
+        const position = geometry.attributes.position;
+
+        if (!position) return;
+
+        // Pobierz wierzchołki w przestrzeni globalnej
+        const vertices: THREE.Vector3[] = [];
+        for (let i = 0; i < position.count; i++) {
+          const vertex = new THREE.Vector3();
+          vertex.fromBufferAttribute(position, i);
+          vertex.applyMatrix4(worldMatrix);
+          vertices.push(vertex);
+        }
+
+        // Sprawdź krawędzie (połączenia wierzchołków)
+        const index = geometry.index;
+        if (index) {
+          // Geometria indeksowana - używamy indeksów
+          for (let i = 0; i < index.count; i += 3) {
+            const indices = [
+              index.getX(i),
+              index.getX(i + 1),
+              index.getX(i + 2)
+            ];
+
+            // Sprawdź każdą krawędź trójkąta
+            const edges = [
+              [indices[0], indices[1]],
+              [indices[1], indices[2]],
+              [indices[2], indices[0]]
+            ];
+
+            edges.forEach(([idx1, idx2]) => {
+              if (idx1 < vertices.length && idx2 < vertices.length) {
+                const v1 = vertices[idx1];
+                const v2 = vertices[idx2];
+                
+                // Oblicz odległość punktu od krawędzi
+                const distance = this.distanceToLineSegment(clickPoint, v1, v2);
+                
+                if (distance < minDistance) {
+                  minDistance = distance;
+                  const direction = new THREE.Vector3().subVectors(v2, v1).normalize();
+                  nearestEdge = {
+                    start: v1.clone(),
+                    end: v2.clone(),
+                    direction: direction
+                  };
+                }
+              }
+            });
+          }
+        } else {
+          // Geometria nieindeksowana - łącz kolejne wierzchołki
+          for (let i = 0; i < vertices.length - 1; i++) {
+            const v1 = vertices[i];
+            const v2 = vertices[i + 1];
+            
+            const distance = this.distanceToLineSegment(clickPoint, v1, v2);
+            
+            if (distance < minDistance) {
+              minDistance = distance;
+              const direction = new THREE.Vector3().subVectors(v2, v1).normalize();
+              nearestEdge = {
+                start: v1.clone(),
+                end: v2.clone(),
+                direction: direction
+              };
+            }
+          }
+        }
+      }
+    });
+
+    return nearestEdge;
+  }
+
+  private distanceToLineSegment(point: THREE.Vector3, lineStart: THREE.Vector3, lineEnd: THREE.Vector3): number {
+    const line = new THREE.Vector3().subVectors(lineEnd, lineStart);
+    const lineLength = line.length();
+    
+    if (lineLength === 0) return point.distanceTo(lineStart);
+    
+    const t = Math.max(0, Math.min(1, new THREE.Vector3().subVectors(point, lineStart).dot(line) / (lineLength * lineLength)));
+    const projection = new THREE.Vector3().addVectors(lineStart, line.multiplyScalar(t));
+    
+    return point.distanceTo(projection);
+  }
+
+  private getAlignedToEdgePoint(startPoint: THREE.Vector3, endPoint: THREE.Vector3): THREE.Vector3 {
+    if (!this.referenceEdge) return endPoint;
+
+    const direction = this.referenceEdge.direction.clone();
+    
+    if (this.alignToEdgeMode === 'parallel') {
+      // Rzutuj wektor na kierunek krawędzi odniesienia
+      const delta = new THREE.Vector3().subVectors(endPoint, startPoint);
+      const projection = direction.multiplyScalar(delta.dot(direction));
+      return new THREE.Vector3().addVectors(startPoint, projection);
+    } else if (this.alignToEdgeMode === 'perpendicular') {
+      // Znajdź kierunek prostopadły do krawędzi odniesienia
+      const delta = new THREE.Vector3().subVectors(endPoint, startPoint);
+      
+      // Utwórz płaszczyznę prostopadłą do krawędzi
+      const perpDirection1 = new THREE.Vector3();
+      if (Math.abs(direction.x) < 0.9) {
+        perpDirection1.crossVectors(direction, new THREE.Vector3(1, 0, 0)).normalize();
+      } else {
+        perpDirection1.crossVectors(direction, new THREE.Vector3(0, 1, 0)).normalize();
+      }
+      
+      const perpDirection2 = new THREE.Vector3().crossVectors(direction, perpDirection1).normalize();
+      
+      // Rzutuj na płaszczyznę prostopadłą
+      const proj1 = delta.dot(perpDirection1);
+      const proj2 = delta.dot(perpDirection2);
+      
+      // Wybierz dominujący kierunek prostopadły
+      let perpVector: THREE.Vector3;
+      if (Math.abs(proj1) > Math.abs(proj2)) {
+        perpVector = perpDirection1.multiplyScalar(proj1);
+      } else {
+        perpVector = perpDirection2.multiplyScalar(proj2);
+      }
+      
+      return new THREE.Vector3().addVectors(startPoint, perpVector);
+    }
+
+    return endPoint;
   }
 
   private getOrthogonalPoint(startPoint: THREE.Vector3, endPoint: THREE.Vector3): THREE.Vector3 {
@@ -511,6 +723,7 @@ export class SimpleDimensionTool {
     // Usuń podgląd
     this.clearPreview();
     this.clearSnapMarker();
+    this.clearReferenceEdge();
     
     console.log('📏 All measurements cleared');
   }
@@ -526,7 +739,24 @@ export class SimpleDimensionTool {
     this.points = [];
     this.clearPreview();
     this.clearSnapMarker();
+    this.clearReferenceEdge();
     console.log('📏 Dimension tool disabled');
+  }
+
+  private clearReferenceEdge(): void {
+    if (this.referenceEdge?.line) {
+      this.scene.remove(this.referenceEdge.line);
+    }
+    this.referenceEdge = null;
+    this.isSelectingEdge = false;
+  }
+
+  // Metoda do resetowania krawędzi odniesienia (wywoływana gdy zmienia się tryb)
+  public resetReferenceEdge(): void {
+    this.clearReferenceEdge();
+    if (this.alignToEdgeMode !== 'none') {
+      console.log('📏 Click on an edge to set as reference');
+    }
   }
 
   // Animacja snap markera

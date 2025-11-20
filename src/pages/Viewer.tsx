@@ -32,6 +32,7 @@ const Viewer = () => {
   const [isDimensionMode, setIsDimensionMode] = useState(false);
   const [dimensionOrthogonal, setDimensionOrthogonal] = useState(false);
   const [dimensionSnap, setDimensionSnap] = useState(true); // Domyślnie włączone
+  const [alignToEdgeMode, setAlignToEdgeMode] = useState<'none' | 'parallel' | 'perpendicular'>('none');
   
   useEffect(() => {
     isPinModeRef.current = isPinMode;
@@ -55,6 +56,14 @@ const Viewer = () => {
       console.log('📏 Snap to points:', dimensionSnap);
     }
   }, [dimensionSnap]);
+  
+  useEffect(() => {
+    if (dimensionsRef.current) {
+      dimensionsRef.current.alignToEdgeMode = alignToEdgeMode;
+      dimensionsRef.current.resetReferenceEdge();
+      console.log('📏 Align to edge mode:', alignToEdgeMode);
+    }
+  }, [alignToEdgeMode]);
   
   // Animacja snap markera
   useEffect(() => {
@@ -889,8 +898,10 @@ const Viewer = () => {
         isOpen={isDimensionMode}
         orthogonalMode={dimensionOrthogonal}
         snapToPoints={dimensionSnap}
+        alignToEdgeMode={alignToEdgeMode}
         onOrthogonalChange={setDimensionOrthogonal}
         onSnapChange={setDimensionSnap}
+        onAlignToEdgeChange={setAlignToEdgeMode}
       />
 
     </div>
