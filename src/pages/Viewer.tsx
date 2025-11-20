@@ -904,9 +904,9 @@ const Viewer = () => {
             mesh.visible = true;
             console.log(`✅ Showing entire mesh ${fragmentId}`);
           }
-          // Jeśli część ma być ukryta - przesuń ukryte instancje poza widok
+          // Jeśli część ma być ukryta - zkolapsuj ukryte instancje do niewidzialnego punktu
           else {
-            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - using matrix displacement`);
+            console.log(`⚠️ Partial hiding in fragment ${fragmentId} - using scale trick (scale≈0)`);
             mesh.visible = true;
             hiddenFragmentsRef.current.set(fragmentId, idsToHide);
             
@@ -923,30 +923,29 @@ const Viewer = () => {
                 console.log(`💾 Saved ${originalMatrices.size} original matrices for fragment ${fragmentId}`);
               }
               
-              // Przesuń ukryte elementy 10000 jednostek w dół (całkowicie poza widok)
+              // Ukryj elementy poprzez skalę = 0 (zkolapsowanie do punktu)
               const matrix = new THREE.Matrix4();
-              const hiddenPosition = new THREE.Vector3(0, -10000, 0);
+              const zeroScale = new THREE.Vector3(0.00001, 0.00001, 0.00001); // Prawie zero (zero powoduje problemy)
               
               allIDs.forEach((id: number, index: number) => {
+                mesh.getMatrixAt(index, matrix);
+                
                 if (idsToHide.has(id)) {
-                  // Pobierz oryginalną macierz
-                  mesh.getMatrixAt(index, matrix);
-                  
-                  // Zachowaj rotację i skalę, zmień tylko pozycję
+                  // Dekompozycja macierzy
                   const position = new THREE.Vector3();
                   const quaternion = new THREE.Quaternion();
                   const scale = new THREE.Vector3();
                   matrix.decompose(position, quaternion, scale);
                   
-                  // Ustaw nową pozycję (10km w dół)
-                  matrix.compose(hiddenPosition, quaternion, scale);
+                  // Ustaw skalę prawie na zero (element staje się niewidzialny)
+                  matrix.compose(position, quaternion, zeroScale);
                   mesh.setMatrixAt(index, matrix);
                 }
-                // Widoczne elementy - zostaw ich oryginalne pozycje
+                // Widoczne elementy - zostaw ich oryginalne macierze
               });
               
               mesh.instanceMatrix.needsUpdate = true;
-              console.log(`✅ Displaced ${idsToHide.size} elements outside view in fragment ${fragmentId}`);
+              console.log(`✅ Scaled down ${idsToHide.size} elements to invisible (scale≈0) in fragment ${fragmentId}`);
             } catch (error) {
               console.error('❌ Error displacing instances:', error);
             }

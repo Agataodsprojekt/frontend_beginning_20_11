@@ -193,20 +193,24 @@
     - Kod próbował: `item.fragment.mesh` ❌
     - Powinno być: `item.mesh` ✅
   
-  **Iteracja 3 (finalna - pełne działanie!):**
+  **Iteracja 3:**
   - Problem: fragmenty mieszane (wybrane belki + niewybrane kolumny) były "fikcyjnie ukryte"
     - Metoda `instanceColor` (czarny kolor) nie działała - elementy nadal widoczne jako ciemne sylwetki
-  - Przyczyna: czarny kolor (0,0,0) na ciemnym tle = ledwo widoczny, ale nie ukryty
+  - Próba naprawy: przesunięcie przez `instanceMatrix` (pozycja y=-10000)
+    - NIE ZADZIAŁAŁO - elementy nadal widoczne, tylko w kolorze
+  
+  **Iteracja 4 (finalna - scale trick!):**
+  - Problem: przesuwanie pozycji nie działa z OpenBIM InstancedMesh
+  - Przyczyna: OpenBIM może cachować pozycje lub ignorować zmiany pozycji
   
   **Ostateczne Rozwiązanie:**
   - ✅ **Pełne fragmenty**: `mesh.visible = false` (100% ukryte)
-  - ✅ **Fragmenty mieszane**: przesunięcie przez `instanceMatrix`
-    - Ukryte instancje przesuwane 10000 jednostek w dół (całkowicie poza widok)
-    - Zapisanie oryginalnych pozycji w `originalMatricesRef`
-    - Zachowanie rotacji i skali, zmiana tylko pozycji
-  - ✅ **Przywracanie**: odtworzenie oryginalnych pozycji z zapisanych matryc
-  - ✅ **100% skuteczność**: elementy całkowicie niewidoczne (nie tylko ciemne)
-  - ✅ **Działa na jasnym i ciemnym tle**
+  - ✅ **Fragmenty mieszane**: skalowanie przez `instanceMatrix`
+    - Ukryte instancje: `scale = (0.00001, 0.00001, 0.00001)` → zkolapsowane do niewidzialnego punktu
+    - Zapisanie oryginalnych matryc w `originalMatricesRef`
+    - Zachowanie pozycji i rotacji, zmiana tylko skali
+  - ✅ **Przywracanie**: odtworzenie oryginalnych matryc (pozycja, rotacja, skala)
+  - ✅ **Działa niezależnie od tła**
   - ✅ **Odwracalne**: pełne przywrócenie oryginalnego stanu
   - ✅ Szczegółowe logowanie do konsoli (✅, ❌, ⚠️, 💾)
 
