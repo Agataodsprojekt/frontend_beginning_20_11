@@ -95,6 +95,39 @@
   - Opisy funkcjonalności
   - Instrukcje sterowania
 
+#### 🔍 Wyszukiwarka Elementów (Search Tool)
+- **Nowa funkcja wyszukiwania elementów w modelu IFC**
+  - Panel wyszukiwania aktywowany przyciskiem lupy 🔍
+  - Wyszukiwanie w czasie rzeczywistym (debounce 300ms)
+  - Minimalna długość zapytania: 2 znaki
+
+- **Kryteria wyszukiwania**
+  - 📝 Nazwa elementu (np. "Column", "Wall")
+  - 🏷️ Typ IFC (np. "IfcWall", "IfcColumn", "IfcBeam")
+  - 🔢 Numer ID elementu (Express ID)
+  - 🌐 GlobalId elementu
+  - 📋 ObjectType elementu
+
+- **Wyświetlanie wyników**
+  - Lista wszystkich znalezionych elementów
+  - Dla każdego elementu: nazwa, typ, ID
+  - Możliwość rozwinięcia szczegółów (właściwości)
+  - Licznik znalezionych wyników
+  - Komunikaty o braku wyników lub zbyt krótkiej frazy
+
+- **Interakcja z wynikami**
+  - Kliknięcie na wynik → automatyczne zaznaczenie elementu w modelu 3D
+  - Wyświetlenie właściwości zaznaczonego elementu w panelu Properties
+  - Możliwość dodania komentarza do znalezionego elementu
+  - Przycisk X lub wybór innego narzędzia zamyka panel
+
+- **Wygląd panelu**
+  - Pozycjonowanie: prawy górny róg (poniżej ActionBar)
+  - Szerokość: 384px (96 w Tailwind)
+  - Maksymalna wysokość: 80vh (przewijanie wyników)
+  - Ciemny/jasny motyw zgodny z resztą aplikacji
+  - Ikona lupy w nagłówku i polu wyszukiwania
+
 ### 🔧 Poprawki i Ulepszenia
 
 #### Ikony Narzędzi

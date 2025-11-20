@@ -4,6 +4,7 @@ import * as THREE from "three";
 import ActionBar from "../components/ActionBar";
 import CommentPanel from "../components/CommentPanel";
 import DimensionOptionsPanel from "../components/DimensionOptionsPanel";
+import { SearchPanel } from "../components/SearchPanel";
 import { useTheme } from "../contexts/ThemeContext";
 import { useComments } from "../hooks/useComments";
 import { SimpleDimensionTool } from "../utils/SimpleDimensionTool";
@@ -33,6 +34,10 @@ const Viewer = () => {
   const [dimensionOrthogonal, setDimensionOrthogonal] = useState(false);
   const [dimensionSnap, setDimensionSnap] = useState(true); // Domyślnie włączone
   const [alignToEdgeMode, setAlignToEdgeMode] = useState<'none' | 'parallel' | 'perpendicular'>('none');
+  
+  // Stan dla wyszukiwania
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const loadedModelsRef = useRef<any[]>([]);
   
   useEffect(() => {
     isPinModeRef.current = isPinMode;
@@ -325,6 +330,10 @@ const Viewer = () => {
       // przetwarzanie właściwości
       propertiesProcessor.process(model);
       await highlighter.updateHighlight();
+      
+      // Zapisz model dla wyszukiwania
+      loadedModelsRef.current.push(model);
+      console.log(`🔍 Model loaded for search: ${loadedModelsRef.current.length} total models`);
       
       // Zapisz obiekty modelu dla narzędzia wymiarowania
       const meshes: THREE.Object3D[] = [];
@@ -631,6 +640,141 @@ const Viewer = () => {
     }, 100);
   };
 
+  // Funkcja wyszukiwania elementów
+  const searchElements = async (query: string) => {
+    const results: Array<{
+      expressID: number;
+      name: string;
+      type: string;
+      properties: Record<string, any>;
+    }> = [];
+
+    const lowerQuery = query.toLowerCase();
+
+    for (const model of loadedModelsRef.current) {
+      try {
+        // Pobierz wszystkie ID elementów z modelu
+        const allIDs = await model.getAllPropertiesOfType(0); // 0 = wszystkie typy
+        
+        if (!allIDs || Object.keys(allIDs).length === 0) {
+          // Jeśli getAllPropertiesOfType nie działa, spróbuj iterować przez fragmenty
+          model.items.forEach((fragment: any) => {
+            if (fragment.ids) {
+              fragment.ids.forEach(async (id: number) => {
+                try {
+                  const props = await model.getProperties(id);
+                  if (props) {
+                    const name = props.Name?.value || props.type || `Element ${id}`;
+                    const type = props.type || 'Unknown';
+                    
+                    // Sprawdź czy pasuje do zapytania
+                    if (
+                      name.toLowerCase().includes(lowerQuery) ||
+                      type.toLowerCase().includes(lowerQuery) ||
+                      id.toString().includes(lowerQuery)
+                    ) {
+                      results.push({
+                        expressID: id,
+                        name,
+                        type,
+                        properties: {
+                          Name: name,
+                          Type: type,
+                          GlobalId: props.GlobalId?.value || 'N/A',
+                          ObjectType: props.ObjectType?.value || 'N/A',
+                        }
+                      });
+                    }
+                  }
+                } catch (error) {
+                  // Ignoruj błędy dla pojedynczych elementów
+                }
+              });
+            }
+          });
+        } else {
+          // Przeszukaj wszystkie właściwości
+          for (const [idStr, props] of Object.entries(allIDs)) {
+            const id = parseInt(idStr);
+            const properties = props as any;
+            
+            const name = properties.Name?.value || properties.type || `Element ${id}`;
+            const type = properties.type || 'Unknown';
+            
+            // Sprawdź czy pasuje do zapytania
+            if (
+              name.toLowerCase().includes(lowerQuery) ||
+              type.toLowerCase().includes(lowerQuery) ||
+              id.toString().includes(lowerQuery) ||
+              (properties.GlobalId?.value || '').toLowerCase().includes(lowerQuery)
+            ) {
+              results.push({
+                expressID: id,
+                name,
+                type,
+                properties: {
+                  Name: name,
+                  Type: type,
+                  GlobalId: properties.GlobalId?.value || 'N/A',
+                  ObjectType: properties.ObjectType?.value || 'N/A',
+                }
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error searching in model:', error);
+      }
+    }
+
+    console.log(`🔍 Found ${results.length} results for query: "${query}"`);
+    return results;
+  };
+
+  // Funkcja obsługi wyboru elementu z wyników wyszukiwania
+  const handleSearchSelect = async (expressID: number) => {
+    if (!highlighterRef.current || loadedModelsRef.current.length === 0) return;
+
+    try {
+      const highlighter = highlighterRef.current;
+      
+      // Znajdź fragment zawierający ten element
+      let foundFragment = null;
+      for (const model of loadedModelsRef.current) {
+        for (const fragment of model.items) {
+          if (fragment.ids && fragment.ids.includes(expressID)) {
+            foundFragment = fragment;
+            break;
+          }
+        }
+        if (foundFragment) break;
+      }
+
+      if (foundFragment) {
+        // Wyczyść poprzednie zaznaczenie
+        highlighter.clear();
+        
+        // Zaznacz element - użyj właściwego formatu FragmentIdMap
+        const fragmentIdMap: { [key: string]: Set<number> } = {
+          [foundFragment.fragment.id]: new Set([expressID])
+        };
+        await highlighter.highlightByID('select', fragmentIdMap);
+        
+        // Pobierz nazwę elementu i wyświetl właściwości
+        const model = foundFragment.fragment.mesh.parent;
+        const properties = await model.getProperties(expressID);
+        const name = properties?.Name?.value || properties?.type || `Element ${expressID}`;
+        
+        setSelectedElementId(expressID.toString());
+        setSelectedElementName(name);
+        
+        console.log(`🔍 Selected element: ${name} (ID: ${expressID})`);
+      }
+    } catch (error) {
+      console.error('Error selecting search result:', error);
+    }
+  };
+
   const handleActionSelect = (action: string) => {
     setActiveAction(action);
     console.log("Selected action:", action);
@@ -692,6 +836,19 @@ const Viewer = () => {
         dimensionsRef.current.disable();
       }
       console.log("📏 Dimension mode disabled");
+    }
+    
+    // Obsługa Search (wyszukiwanie)
+    if (action === "search") {
+      setShowSearchPanel(true);
+      console.log("🔍 Search panel enabled");
+      return;
+    }
+    
+    // Wyłącz panel wyszukiwania gdy wybrana jest inna akcja lub move
+    if (showSearchPanel && action !== "search") {
+      setShowSearchPanel(false);
+      console.log("🔍 Search panel disabled");
     }
     
     // TODO: Implement other action handlers
@@ -1084,6 +1241,14 @@ const Viewer = () => {
         onAlignToEdgeChange={setAlignToEdgeMode}
       />
 
+      {/* Panel wyszukiwania */}
+      {showSearchPanel && (
+        <SearchPanel
+          onClose={() => setShowSearchPanel(false)}
+          onSelectElement={handleSearchSelect}
+          searchFunction={searchElements}
+        />
+      )}
 
     </div>
   );
