@@ -23,6 +23,7 @@ export class SimpleDimensionTool {
   private tempGroup: THREE.Group | null = null;
   private tempMarker: THREE.Mesh | null = null;
   private snapMarker: THREE.Mesh | null = null;
+  private snapPointMarkers: THREE.Mesh[] = []; // Małe zielone kwadraty pokazujące punkty snap
   public enabled: boolean = false;
   public onMeasurementCreated: ((data: { group: THREE.Group; start: THREE.Vector3; end: THREE.Vector3 }) => void) | null = null;
 
@@ -65,17 +66,20 @@ export class SimpleDimensionTool {
     const point = this.getPoint(event, objects);
     if (!point) {
       this.clearSnapMarker();
+      this.clearSnapPointMarkers(); // Wyczyść małe kwadraty
       if (this.points.length === 1) {
         this.clearPreview();
       }
       return;
     }
 
-    // Pokaż snap marker jeśli snap jest włączony
+    // Pokaż wszystkie punkty snap w pobliżu jako małe zielone kwadraty
     if (this.snapToPoints && this.points.length < 2) {
-      this.showSnapMarker(point);
+      this.showAllNearbySnapPoints(point, objects);
+      this.showSnapMarker(point); // Główny marker na najbliższym punkcie
     } else {
       this.clearSnapMarker();
+      this.clearSnapPointMarkers();
     }
 
     // Pokaż podgląd wymiaru
@@ -88,6 +92,7 @@ export class SimpleDimensionTool {
   public clearPreviewAndSnap(): void {
     this.clearPreview();
     this.clearSnapMarker();
+    this.clearSnapPointMarkers(); // Wyczyść małe kwadraty
   }
 
   private getPoint(event: MouseEvent, objects: THREE.Object3D[]): THREE.Vector3 | null {
@@ -123,6 +128,106 @@ export class SimpleDimensionTool {
     }
 
     return point;
+  }
+
+  // Wyświetl wszystkie punkty snap w pobliżu (małe zielone kwadraty)
+  private showAllNearbySnapPoints(clickPoint: THREE.Vector3, objects: THREE.Object3D[]): void {
+    // Wyczyść poprzednie markery
+    this.clearSnapPointMarkers();
+    
+    if (!this.snapToPoints) return;
+    
+    const allSnapPoints: SnapPoint[] = [];
+    
+    // Zbierz punkty snap ze wszystkich obiektów w pobliżu kursora
+    objects.forEach(obj => {
+      const processObject = (o: THREE.Object3D) => {
+        if (o instanceof THREE.Mesh && o.geometry) {
+          const geometry = o.geometry;
+          const worldMatrix = o.matrixWorld;
+          const position = geometry.attributes.position;
+          
+          if (position) {
+            // Ograniczamy liczbę wierzchołków (wydajność)
+            const step = Math.max(1, Math.floor(position.count / 50));
+            
+            for (let i = 0; i < position.count; i += step) {
+              const vertex = new THREE.Vector3();
+              vertex.fromBufferAttribute(position, i);
+              vertex.applyMatrix4(worldMatrix);
+              
+              // Tylko punkty w rozsądnej odległości od kursora
+              if (vertex.distanceTo(clickPoint) < this.snapThreshold * 3) {
+                allSnapPoints.push({ position: vertex, type: 'vertex' });
+              }
+            }
+            
+            // Dodaj środek elementu
+            geometry.computeBoundingBox();
+            if (geometry.boundingBox) {
+              const center = new THREE.Vector3();
+              geometry.boundingBox.getCenter(center);
+              center.applyMatrix4(worldMatrix);
+              
+              if (center.distanceTo(clickPoint) < this.snapThreshold * 3) {
+                allSnapPoints.push({ position: center, type: 'center' });
+              }
+              
+              // Rogi bounding box
+              const min = geometry.boundingBox.min.clone().applyMatrix4(worldMatrix);
+              const max = geometry.boundingBox.max.clone().applyMatrix4(worldMatrix);
+              
+              if (min.distanceTo(clickPoint) < this.snapThreshold * 3) {
+                allSnapPoints.push({ position: min, type: 'vertex' });
+              }
+              if (max.distanceTo(clickPoint) < this.snapThreshold * 3) {
+                allSnapPoints.push({ position: max, type: 'vertex' });
+              }
+            }
+          }
+        }
+      };
+      
+      processObject(obj);
+      obj.traverse(processObject);
+    });
+    
+    // Utwórz małe zielone kwadraty dla każdego punktu
+    allSnapPoints.forEach(sp => {
+      const marker = this.createSnapPointMarker(sp.position);
+      this.scene.add(marker);
+      this.snapPointMarkers.push(marker);
+    });
+  }
+  
+  // Utwórz mały zielony kwadrat dla punktu snap
+  private createSnapPointMarker(position: THREE.Vector3): THREE.Mesh {
+    const size = 0.05;
+    const geometry = new THREE.BoxGeometry(size, size, size);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00FF00, // Jasna zieleń
+      transparent: true,
+      opacity: 0.7,
+      depthTest: false,
+      depthWrite: false
+    });
+    
+    const marker = new THREE.Mesh(geometry, material);
+    marker.position.copy(position);
+    marker.renderOrder = 1002;
+    
+    // Dodaj losowy offset czasowy dla animacji
+    (marker as any).animationOffset = Math.random() * Math.PI * 2;
+    
+    return marker;
+  }
+  
+  // Wyczyść wszystkie markery punktów snap
+  private clearSnapPointMarkers(): void {
+    this.snapPointMarkers.forEach(marker => {
+      this.scene.remove(marker);
+    });
+    this.snapPointMarkers = [];
   }
 
   private findNearestSnapPoint(clickPoint: THREE.Vector3, object: THREE.Object3D): SnapPoint | null {
@@ -769,26 +874,44 @@ export class SimpleDimensionTool {
     color: number,
     temporary: boolean
   ): void {
+    // Znak architektoniczny - ukośna kreska pod kątem 45°
     const direction = new THREE.Vector3().subVectors(targetPosition, position).normalize();
     
-    const arrowLength = 0.06;
-    const arrowWidth = 0.02;
-
-    const arrowGeometry = new THREE.ConeGeometry(arrowWidth, arrowLength, 8);
-    const arrowMaterial = new THREE.MeshBasicMaterial({
+    const tickLength = 0.12; // Długość kreski
+    const tickWidth = 0.015; // Grubość kreski
+    
+    // Oblicz kierunek prostopadły do linii wymiaru
+    const perpendicular = new THREE.Vector3();
+    if (Math.abs(direction.y) < 0.99) {
+      perpendicular.crossVectors(direction, new THREE.Vector3(0, 1, 0)).normalize();
+    } else {
+      perpendicular.crossVectors(direction, new THREE.Vector3(1, 0, 0)).normalize();
+    }
+    
+    // Utwórz ukośną kreskę (45° od kierunku wymiaru)
+    const tickStart = position.clone()
+      .add(perpendicular.clone().multiplyScalar(tickLength / 2))
+      .sub(direction.clone().multiplyScalar(tickLength / 2));
+    
+    const tickEnd = position.clone()
+      .sub(perpendicular.clone().multiplyScalar(tickLength / 2))
+      .add(direction.clone().multiplyScalar(tickLength / 2));
+    
+    // Utwórz geometrię linii dla kreski
+    const tickGeometry = new THREE.BufferGeometry().setFromPoints([tickStart, tickEnd]);
+    const tickMaterial = new THREE.LineBasicMaterial({
       color: color,
+      linewidth: 3,
       transparent: temporary,
       opacity: temporary ? 0.7 : 1,
       depthTest: false,
       depthWrite: false
     });
-    const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
-
-    arrow.position.copy(position);
-    arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-    arrow.renderOrder = 998;
-
-    group.add(arrow);
+    
+    const tick = new THREE.Line(tickGeometry, tickMaterial);
+    tick.renderOrder = 998;
+    
+    group.add(tick);
   }
 
   private createLabel(distance: number, temporary: boolean): THREE.Sprite {
@@ -894,6 +1017,7 @@ export class SimpleDimensionTool {
     // Usuń podgląd
     this.clearPreview();
     this.clearSnapMarker();
+    this.clearSnapPointMarkers();
     this.clearReferenceEdge();
     
     console.log('📏 All measurements cleared');
@@ -910,6 +1034,7 @@ export class SimpleDimensionTool {
     this.points = [];
     this.clearPreview();
     this.clearSnapMarker();
+    this.clearSnapPointMarkers();
     this.clearReferenceEdge();
     console.log('📏 Dimension tool disabled');
   }
@@ -1136,6 +1261,19 @@ export class SimpleDimensionTool {
 
     // Aktualizuj snap marker
     this.updateSnapMarker();
+    
+    // Animuj małe kwadraty punktów snap (obracanie)
+    const time = Date.now() * 0.002;
+    this.snapPointMarkers.forEach((marker) => {
+      const offset = (marker as any).animationOffset || 0;
+      marker.rotation.x = time + offset;
+      marker.rotation.y = time + offset;
+      marker.rotation.z = time * 0.5 + offset;
+      
+      // Lekka pulsacja
+      const scale = 1 + Math.sin(time * 2 + offset) * 0.2;
+      marker.scale.setScalar(scale);
+    });
   }
 
   private updateSpriteScale(sprite: THREE.Sprite): void {
