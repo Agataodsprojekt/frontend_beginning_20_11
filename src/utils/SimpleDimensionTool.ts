@@ -179,6 +179,8 @@ export class SimpleDimensionTool {
   }
 
   private selectReferenceEdge(event: MouseEvent, objects: THREE.Object3D[]): void {
+    console.log('📏 Selecting reference edge, mode:', this.alignToEdgeMode);
+    
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -188,10 +190,17 @@ export class SimpleDimensionTool {
     this.raycaster.setFromCamera(mouse, this.camera);
     const intersects = this.raycaster.intersectObjects(objects, true);
 
-    if (intersects.length === 0) return;
+    console.log('📏 Intersects found:', intersects.length);
+
+    if (intersects.length === 0) {
+      console.log('📏 No intersects found!');
+      return;
+    }
 
     const intersect = intersects[0];
     const clickPoint = intersect.point;
+    console.log('📏 Click point:', clickPoint);
+    console.log('📏 Intersected object:', intersect.object);
 
     // Znajdź najbliższą krawędź
     const edge = this.findNearestEdge(clickPoint, intersect.object);
@@ -199,6 +208,8 @@ export class SimpleDimensionTool {
       console.log('📏 No edge found near click point');
       return;
     }
+    
+    console.log('📏 Edge found!', edge);
 
     // Usuń poprzednią linię odniesienia jeśli istnieje
     if (this.referenceEdge?.line) {
@@ -230,16 +241,24 @@ export class SimpleDimensionTool {
   }
 
   private findNearestEdge(clickPoint: THREE.Vector3, object: THREE.Object3D): { start: THREE.Vector3; end: THREE.Vector3; direction: THREE.Vector3 } | null {
+    console.log('📏 Finding nearest edge for object:', object);
     let nearestEdge: { start: THREE.Vector3; end: THREE.Vector3; direction: THREE.Vector3 } | null = null;
-    let minDistance = this.snapThreshold * 2;
+    let minDistance = this.snapThreshold * 3; // Zwiększony próg dla łatwiejszego wykrycia
+    let edgesChecked = 0;
 
-    object.traverseAncestors((ancestor) => {
-      if (ancestor instanceof THREE.Mesh && ancestor.geometry) {
-        const geometry = ancestor.geometry;
-        const worldMatrix = ancestor.matrixWorld;
+    // Przeszukaj obiekt i wszystkie jego dzieci
+    const processObject = (obj: THREE.Object3D) => {
+      if (obj instanceof THREE.Mesh && obj.geometry) {
+        const geometry = obj.geometry;
+        const worldMatrix = obj.matrixWorld;
         const position = geometry.attributes.position;
 
-        if (!position) return;
+        if (!position) {
+          console.log('📏 No position attribute in geometry');
+          return;
+        }
+        
+        console.log('📏 Processing mesh with', position.count, 'vertices');
 
         // Pobierz wierzchołki w przestrzeni globalnej
         const vertices: THREE.Vector3[] = [];
@@ -284,12 +303,15 @@ export class SimpleDimensionTool {
                     end: v2.clone(),
                     direction: direction
                   };
+                  edgesChecked++;
                 }
               }
             });
           }
+          console.log('📏 Indexed geometry -', index.count / 3, 'triangles checked');
         } else {
           // Geometria nieindeksowana - łącz kolejne wierzchołki
+          console.log('📏 Non-indexed geometry -', vertices.length, 'vertices');
           for (let i = 0; i < vertices.length - 1; i++) {
             const v1 = vertices[i];
             const v2 = vertices[i + 1];
@@ -304,11 +326,73 @@ export class SimpleDimensionTool {
                 end: v2.clone(),
                 direction: direction
               };
+              edgesChecked++;
             }
           }
         }
       }
-    });
+    };
+
+    // Wywołaj processObject na klikniętym obiekcie i jego dzieciach
+    processObject(object);
+    object.traverse(processObject);
+    
+    console.log('📏 Edges checked:', edgesChecked, 'Nearest edge:', nearestEdge, 'Min distance:', minDistance);
+
+    // Jeśli nie znaleziono krawędzi blisko punktu, użyj uproszczonej metody
+    // Znajdź najdłuższą krawędź z bounding box
+    if (!nearestEdge && object instanceof THREE.Mesh && object.geometry) {
+      console.log('📏 No edge found close enough, using bounding box edges');
+      object.geometry.computeBoundingBox();
+      if (object.geometry.boundingBox) {
+        const bbox = object.geometry.boundingBox;
+        const worldMatrix = object.matrixWorld;
+        
+        // Pobierz rogi bounding box w przestrzeni globalnej
+        const corners = [
+          new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.min.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.min.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.min.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.max.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.max.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z).applyMatrix4(worldMatrix),
+          new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.max.z).applyMatrix4(worldMatrix),
+        ];
+        
+        // Krawędzie bounding box
+        const bboxEdges = [
+          [corners[0], corners[1]], // bottom front
+          [corners[1], corners[2]], // right front
+          [corners[2], corners[3]], // top front
+          [corners[3], corners[0]], // left front
+          [corners[4], corners[5]], // bottom back
+          [corners[5], corners[6]], // right back
+          [corners[6], corners[7]], // top back
+          [corners[7], corners[4]], // left back
+          [corners[0], corners[4]], // bottom left
+          [corners[1], corners[5]], // bottom right
+          [corners[2], corners[6]], // top right
+          [corners[3], corners[7]], // top left
+        ];
+        
+        // Znajdź najbliższą krawędź z bounding box
+        bboxEdges.forEach(([v1, v2]) => {
+          const distance = this.distanceToLineSegment(clickPoint, v1, v2);
+          if (distance < minDistance) {
+            minDistance = distance;
+            const direction = new THREE.Vector3().subVectors(v2, v1).normalize();
+            nearestEdge = {
+              start: v1,
+              end: v2,
+              direction: direction
+            };
+          }
+        });
+        
+        console.log('📏 Using bounding box edge:', nearestEdge);
+      }
+    }
 
     return nearestEdge;
   }
