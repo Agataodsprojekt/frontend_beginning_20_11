@@ -39,8 +39,8 @@ export class SimpleDimensionTool {
     this.scene = scene;
     this.camera = camera;
     this.raycaster = new THREE.Raycaster();
-    this.raycaster.params.Line = { threshold: 0.1 };
-    this.raycaster.params.Points = { threshold: 0.1 };
+    this.raycaster.params.Line = { threshold: 0.5 }; // Zwiększony dla łatwiejszego klikania
+    this.raycaster.params.Points = { threshold: 0.5 };
   }
 
   public handleClick(event: MouseEvent, objects: THREE.Object3D[]): void {
@@ -855,7 +855,7 @@ export class SimpleDimensionTool {
     }
   }
 
-  // Usuwanie wybranego wymiaru (prawy przycisk + Delete)
+  // Zaznaczanie wymiaru do usunięcia (Ctrl + kliknięcie)
   public handleRightClick(event: MouseEvent, objects: THREE.Object3D[]): THREE.Group | null {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     const mouse = new THREE.Vector2(
@@ -867,28 +867,64 @@ export class SimpleDimensionTool {
     
     // Sprawdź czy kliknięto w jakiś wymiar
     let nearestMeasurement: THREE.Group | null = null;
-    let minDistance = 0.5; // Próg odległości
+    let minDistance = 1.0; // Zwiększony próg odległości dla łatwiejszego klikania
+    
+    console.log('📏 Checking', this.measurements.length, 'measurements for selection');
 
     this.measurements.forEach((group) => {
       // Sprawdź odległość od każdego dziecka w grupie
       group.children.forEach((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+        if (child instanceof THREE.Line) {
+          // Dla linii - sprawdź raycast
           const intersects = this.raycaster.intersectObject(child, false);
-          if (intersects.length > 0 && intersects[0].distance < minDistance) {
-            minDistance = intersects[0].distance;
-            nearestMeasurement = group;
+          if (intersects.length > 0) {
+            const distance = intersects[0].distance;
+            console.log('📏 Line intersect at distance:', distance);
+            if (distance < minDistance) {
+              minDistance = distance;
+              nearestMeasurement = group;
+            }
           }
-        }
-        // Sprawdź także sprite'y (etykiety)
-        if (child instanceof THREE.Sprite) {
-          const distance = this.raycaster.ray.distanceToPoint(child.position);
-          if (distance < minDistance) {
-            minDistance = distance;
-            nearestMeasurement = group;
+        } else if (child instanceof THREE.Mesh) {
+          // Dla mesh (markery, strzałki)
+          const intersects = this.raycaster.intersectObject(child, false);
+          if (intersects.length > 0) {
+            const distance = intersects[0].distance;
+            console.log('📏 Mesh intersect at distance:', distance);
+            if (distance < minDistance) {
+              minDistance = distance;
+              nearestMeasurement = group;
+            }
+          }
+        } else if (child instanceof THREE.Sprite) {
+          // Dla sprite'ów (etykiety) - sprawdź odległość 2D na ekranie
+          const spritePos = child.position.clone();
+          spritePos.project(this.camera);
+          
+          const distance2D = Math.sqrt(
+            Math.pow(spritePos.x - mouse.x, 2) + 
+            Math.pow(spritePos.y - mouse.y, 2)
+          );
+          
+          // Jeśli kliknięcie jest blisko sprite'a (w promieniu 0.1 w przestrzeni NDC)
+          if (distance2D < 0.15) {
+            console.log('📏 Sprite clicked at 2D distance:', distance2D);
+            // Użyj odległości 3D jako priorytetu
+            const distance3D = this.raycaster.ray.distanceToPoint(child.position);
+            if (distance3D < minDistance) {
+              minDistance = distance3D;
+              nearestMeasurement = group;
+            }
           }
         }
       });
     });
+
+    if (nearestMeasurement) {
+      console.log('📏 Measurement found for selection!');
+    } else {
+      console.log('📏 No measurement found near click');
+    }
 
     return nearestMeasurement;
   }
@@ -900,6 +936,22 @@ export class SimpleDimensionTool {
       this.measurements.splice(index, 1);
       console.log('📏 Measurement deleted');
     }
+  }
+
+  // Podświetlanie wymiaru (do zaznaczania przed usunięciem)
+  public highlightMeasurement(measurement: THREE.Group, highlight: boolean): void {
+    const highlightColor = 0xFF0000; // Czerwony dla zaznaczenia do usunięcia
+    const normalColor = 0x2196F3; // Niebieski normalny kolor
+    
+    measurement.children.forEach((child) => {
+      if (child instanceof THREE.Line) {
+        const material = child.material as THREE.LineBasicMaterial;
+        material.color.setHex(highlight ? highlightColor : normalColor);
+      } else if (child instanceof THREE.Mesh) {
+        const material = child.material as THREE.MeshBasicMaterial;
+        material.color.setHex(highlight ? highlightColor : normalColor);
+      }
+    });
   }
 
   // Metoda do resetowania krawędzi odniesienia (wywoływana gdy zmienia się tryb)

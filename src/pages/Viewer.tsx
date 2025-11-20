@@ -182,13 +182,6 @@ const Viewer = () => {
     const dimensions = new SimpleDimensionTool(scene, cameraComponent.get());
     dimensionsRef.current = dimensions;
     
-    // Event listener dla kliknięć w trybie wymiarowania
-    const handleDimensionClick = (event: MouseEvent) => {
-      if (dimensions.enabled && modelObjectsRef.current.length > 0) {
-        dimensions.handleClick(event, modelObjectsRef.current);
-      }
-    };
-    
     // Event listener dla ruchu myszy w trybie wymiarowania (podgląd)
     const handleDimensionMove = (event: MouseEvent) => {
       if (dimensions.enabled && modelObjectsRef.current.length > 0) {
@@ -199,22 +192,33 @@ const Viewer = () => {
     // Stan dla zaznaczonego wymiaru do usunięcia
     let selectedMeasurementToDelete: THREE.Group | null = null;
     
-    // Event listener dla prawego przycisku myszy (zaznaczanie wymiaru do usunięcia)
-    const handleRightClick = (event: MouseEvent) => {
-      if (dimensions.enabled && modelObjectsRef.current.length > 0) {
-        event.preventDefault();
+    // Modyfikacja handleDimensionClick aby obsługiwać Ctrl+kliknięcie dla usuwania
+    const handleDimensionClickWithDelete = (event: MouseEvent) => {
+      if (!dimensions.enabled || modelObjectsRef.current.length === 0) return;
+      
+      // Ctrl + kliknięcie = zaznacz wymiar do usunięcia
+      if (event.ctrlKey || event.metaKey) {
         selectedMeasurementToDelete = dimensions.handleRightClick(event, modelObjectsRef.current);
         if (selectedMeasurementToDelete) {
           console.log('📏 Measurement selected for deletion. Press Delete to remove.');
+          dimensions.highlightMeasurement(selectedMeasurementToDelete, true);
+        } else {
+          console.log('📏 No measurement found at click position');
         }
+      } else {
+        // Normalne kliknięcie = dodaj punkt wymiaru
+        dimensions.handleClick(event, modelObjectsRef.current);
       }
     };
     
-    // Event listener dla klawisza ESC (anulowanie bieżącego wymiaru)
+    // Event listener dla klawisza ESC (anulowanie bieżącego wymiaru) i Delete (usuwanie)
     const handleKeyDown = (event: KeyboardEvent) => {
       if (dimensions.enabled) {
         if (event.key === 'Escape') {
           dimensions.cancelCurrentMeasurement();
+          if (selectedMeasurementToDelete) {
+            dimensions.highlightMeasurement(selectedMeasurementToDelete, false);
+          }
           selectedMeasurementToDelete = null;
           console.log('📏 Current measurement canceled');
         } else if (event.key === 'Delete' && selectedMeasurementToDelete) {
@@ -225,9 +229,8 @@ const Viewer = () => {
       }
     };
     
-    viewerContainerRef.current.addEventListener('click', handleDimensionClick);
+    viewerContainerRef.current.addEventListener('click', handleDimensionClickWithDelete);
     viewerContainerRef.current.addEventListener('mousemove', handleDimensionMove);
-    viewerContainerRef.current.addEventListener('contextmenu', handleRightClick);
     document.addEventListener('keydown', handleKeyDown);
     console.log("📏 Simple dimension tool initialized");
 
@@ -378,9 +381,8 @@ const Viewer = () => {
     // Cleanup function
     return () => {
       if (viewerContainerRef.current) {
-        viewerContainerRef.current.removeEventListener('click', handleDimensionClick);
+        viewerContainerRef.current.removeEventListener('click', handleDimensionClickWithDelete);
         viewerContainerRef.current.removeEventListener('mousemove', handleDimensionMove);
-        viewerContainerRef.current.removeEventListener('contextmenu', handleRightClick);
       }
       document.removeEventListener('keydown', handleKeyDown);
       if (animationFrameId) {
