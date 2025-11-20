@@ -97,6 +97,13 @@
 
 ### 🔧 Poprawki i Ulepszenia
 
+#### Ikona Narzędzia Wymiarowania
+- ✨ **Nowa ikona wymiarowania ze strzałkami**
+  - Symbol ze strzałkami w lewo i prawo
+  - Litera "X" nad symbolem
+  - Profesjonalny wygląd symbolu wymiarowania
+  - Zgodny z międzynarodowymi standardami CAD
+
 #### Usunięte Elementy
 - ❌ Usunięto wskaźnik osi (X/Y/Z badge) z wymiarów ortogonalnych
 - ❌ Usunięto dużą niebieską podpowiedź na dole ekranu
@@ -113,6 +120,7 @@
 #### Komponenty
 - `src/utils/SimpleDimensionTool.ts` - Główna implementacja narzędzia wymiarowania
 - `src/components/DimensionOptionsPanel.tsx` - Panel opcji wymiarowania
+- `src/components/icons/DimensionIcon.tsx` - Własna ikona wymiarowania ze strzałkami
 
 #### Funkcje SimpleDimensionTool
 - `handleClick()` - obsługa kliknięć (dodawanie punktów)

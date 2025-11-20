@@ -6,13 +6,13 @@ import {
   Pin,
   Sun,
   Moon,
-  Ruler,
   Camera,
   MessageCircle,
   Share2,
   Lightbulb,
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
+import DimensionIcon from "./icons/DimensionIcon";
 
 interface ActionBarProps {
   onActionSelect?: (action: string) => void;
@@ -59,7 +59,7 @@ export default function ActionBar({ onActionSelect }: ActionBarProps) {
     {
       id: "dimension",
       label: "Dimension",
-      icon: Ruler,
+      icon: DimensionIcon,
       tooltip: "Measure distances and dimensions",
     },
     {
