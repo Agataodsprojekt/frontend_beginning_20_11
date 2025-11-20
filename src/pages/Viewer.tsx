@@ -149,7 +149,15 @@ const Viewer = () => {
       }
     };
     
+    // Event listener dla ruchu myszy w trybie wymiarowania (podgląd)
+    const handleDimensionMove = (event: MouseEvent) => {
+      if (dimensions.enabled && modelObjectsRef.current.length > 0) {
+        dimensions.handleMouseMove(event, modelObjectsRef.current);
+      }
+    };
+    
     viewerContainerRef.current.addEventListener('click', handleDimensionClick);
+    viewerContainerRef.current.addEventListener('mousemove', handleDimensionMove);
     console.log("📏 Simple dimension tool initialized");
 
     const propertiesProcessor = new OBC.IfcPropertiesProcessor(viewer);
@@ -290,6 +298,7 @@ const Viewer = () => {
     return () => {
       if (viewerContainerRef.current) {
         viewerContainerRef.current.removeEventListener('click', handleDimensionClick);
+        viewerContainerRef.current.removeEventListener('mousemove', handleDimensionMove);
       }
       if (viewerRef.current) {
         viewerRef.current.dispose();
