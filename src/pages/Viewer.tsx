@@ -637,8 +637,15 @@ const Viewer = () => {
     
     // Obsługa przycisku Comment
     if (action === "comment") {
-      setShowCommentPanel((prev) => !prev);
+      setShowCommentPanel(true);
+      console.log("💬 Comment panel enabled");
       return;
+    }
+    
+    // Wyłącz panel komentarzy gdy wybrana jest inna akcja lub move
+    if (showCommentPanel && action !== "comment") {
+      setShowCommentPanel(false);
+      console.log("💬 Comment panel disabled");
     }
     
     // Obsługa Undo/Redo
@@ -667,20 +674,24 @@ const Viewer = () => {
     
     // Obsługa Dimension (wymiarowanie)
     if (action === "dimension") {
-      const newDimensionMode = !isDimensionMode;
-      setIsDimensionMode(newDimensionMode);
+      setIsDimensionMode(true);
       
       if (dimensionsRef.current) {
-        if (newDimensionMode) {
-          dimensionsRef.current.enable();
-          // Wyłącz pin mode jeśli jest aktywny
-          setIsPinMode(false);
-        } else {
-          dimensionsRef.current.disable();
-        }
-        console.log("📏 Dimension mode:", newDimensionMode);
+        dimensionsRef.current.enable();
+        // Wyłącz pin mode jeśli jest aktywny
+        setIsPinMode(false);
       }
+      console.log("📏 Dimension mode enabled");
       return;
+    }
+    
+    // Wyłącz dimension mode gdy wybrana jest inna akcja lub move
+    if (isDimensionMode && action !== "dimension") {
+      setIsDimensionMode(false);
+      if (dimensionsRef.current) {
+        dimensionsRef.current.disable();
+      }
+      console.log("📏 Dimension mode disabled");
     }
     
     // TODO: Implement other action handlers
