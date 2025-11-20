@@ -853,73 +853,151 @@ const Viewer = () => {
   };
 
   const isolateElements = async () => {
-    if (!highlighterRef.current || selectedElements.length === 0) return;
+    if (!viewerRef.current || selectedElements.length === 0) return;
 
     try {
-      const highlighter = highlighterRef.current;
       const selectedIDs = new Set(selectedElements.map(el => el.expressID));
       
-      // Przejdź przez wszystkie fragmenty i ukryj te, które nie są wybrane
+      console.log('🔍 Starting isolation for', selectedElements.length, 'elements');
+      console.log('Selected IDs:', Array.from(selectedIDs));
+      
+      // Przejdź przez wszystkie modele i fragmenty
       for (const model of loadedModelsRef.current) {
-        for (const fragment of model.items) {
-          const fragmentId = fragment.fragment.id;
-          const allIDs = fragment.ids || new Set();
-          const idsToHide = new Set<number>();
+        console.log('Processing model with', model.items.length, 'fragments');
+        
+        for (const item of model.items) {
+          const fragment = item.fragment;
+          const mesh = fragment.mesh;
+          const fragmentId = fragment.id;
           
-          // Znajdź wszystkie ID które nie są w selekcji
+          // Pobierz wszystkie ID w tym fragmencie
+          const allIDs = item.ids || [];
+          console.log(`Fragment ${fragmentId} has ${allIDs.length} elements`);
+          
+          // Sprawdź które ID powinny być ukryte
+          const idsToHide = new Set<number>();
+          const idsToShow = new Set<number>();
+          
           allIDs.forEach((id: number) => {
-            if (!selectedIDs.has(id)) {
+            if (selectedIDs.has(id)) {
+              idsToShow.add(id);
+            } else {
               idsToHide.add(id);
             }
           });
           
-          if (idsToHide.size > 0) {
-            // Zapisz ukryte fragmenty do późniejszego przywrócenia
+          console.log(`Fragment ${fragmentId}: hiding ${idsToHide.size}, showing ${idsToShow.size}`);
+          
+          // Jeśli wszystkie elementy mają być ukryte, ukryj cały mesh
+          if (idsToShow.size === 0) {
+            mesh.visible = false;
+            hiddenFragmentsRef.current.set(fragmentId, new Set(allIDs));
+            console.log(`Hidden entire mesh ${fragmentId}`);
+          }
+          // Jeśli wszystkie elementy mają być widoczne, pokaż mesh
+          else if (idsToHide.size === 0) {
+            mesh.visible = true;
+            console.log(`Showing entire mesh ${fragmentId}`);
+          }
+          // Jeśli część ma być ukryta, użyj setVisibility na fragmencie
+          else {
+            mesh.visible = true;
             hiddenFragmentsRef.current.set(fragmentId, idsToHide);
             
-            // Ukryj elementy
-            await highlighter.highlightByID('clear', {
-              [fragmentId]: idsToHide
-            });
-            
-            // Ustaw przezroczystość lub ukryj
-            fragment.fragment.mesh.traverse((child: any) => {
-              if (child.isMesh && idsToHide.has(child.userData?.expressID)) {
-                child.visible = false;
+            // Ukryj konkretne instancje poprzez ich widoczność
+            try {
+              // Ustaw opacity dla ukrytych elementów (przezroczystość)
+              if (fragment.setVisibility) {
+                fragment.setVisibility(false, idsToHide);
+                console.log(`Used setVisibility for ${idsToHide.size} elements in fragment ${fragmentId}`);
+              } else {
+                // Fallback: użyj instanceColor z alpha = 0
+                console.log('Using instanceColor fallback for fragment', fragmentId);
+                const geometry = mesh.geometry;
+                const count = geometry.attributes.position.count;
+                
+                if (!mesh.instanceColor) {
+                  const colors = new Float32Array(count * 3);
+                  for (let i = 0; i < count; i++) {
+                    colors[i * 3] = 1;
+                    colors[i * 3 + 1] = 1;
+                    colors[i * 3 + 2] = 1;
+                  }
+                  mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+                }
+                
+                // Ustaw kolor na czarny dla ukrytych (wizualnie niewidoczne na ciemnym tle)
+                idsToHide.forEach((id) => {
+                  const index = allIDs.indexOf(id);
+                  if (index !== -1) {
+                    mesh.instanceColor.setXYZ(index, 0, 0, 0);
+                  }
+                });
+                mesh.instanceColor.needsUpdate = true;
               }
-            });
+            } catch (error) {
+              console.error('Error hiding instances in fragment:', error);
+            }
           }
         }
       }
       
       setIsIsolated(true);
-      console.log('🔍 Isolated', selectedElements.length, 'elements');
+      console.log('✅ Isolation complete');
     } catch (error) {
-      console.error('Error isolating elements:', error);
+      console.error('❌ Error isolating elements:', error);
     }
   };
 
   const unisolateElements = async () => {
-    if (!highlighterRef.current) return;
+    if (!viewerRef.current) return;
 
     try {
-      // Przywróć widoczność wszystkich ukrytych elementów
+      console.log('👁️ Starting unisolation - restoring all elements');
+      
+      // Przywróć widoczność wszystkich elementów
       for (const model of loadedModelsRef.current) {
-        for (const fragment of model.items) {
-          fragment.fragment.mesh.traverse((child: any) => {
-            if (child.isMesh) {
-              child.visible = true;
+        for (const item of model.items) {
+          const fragment = item.fragment;
+          const mesh = fragment.mesh;
+          const fragmentId = fragment.id;
+          
+          // Pokaż mesh
+          mesh.visible = true;
+          
+          // Jeśli używaliśmy setVisibility, przywróć widoczność
+          const hiddenIDs = hiddenFragmentsRef.current.get(fragmentId);
+          if (hiddenIDs && hiddenIDs.size > 0) {
+            try {
+              if (fragment.setVisibility) {
+                fragment.setVisibility(true, hiddenIDs);
+                console.log(`Restored visibility for ${hiddenIDs.size} elements in fragment ${fragmentId}`);
+              } else {
+                // Fallback: przywróć kolory
+                if (mesh.instanceColor) {
+                  const allIDs = item.ids || [];
+                  hiddenIDs.forEach((id) => {
+                    const index = allIDs.indexOf(id);
+                    if (index !== -1) {
+                      mesh.instanceColor.setXYZ(index, 1, 1, 1);
+                    }
+                  });
+                  mesh.instanceColor.needsUpdate = true;
+                }
+              }
+            } catch (error) {
+              console.error('Error restoring visibility in fragment:', error);
             }
-          });
+          }
         }
       }
       
       // Wyczyść zapisane ukryte fragmenty
       hiddenFragmentsRef.current.clear();
       setIsIsolated(false);
-      console.log('👁️ Unisolated - showing all elements');
+      console.log('✅ Unisolation complete - all elements visible');
     } catch (error) {
-      console.error('Error unisolating elements:', error);
+      console.error('❌ Error unisolating elements:', error);
     }
   };
 
